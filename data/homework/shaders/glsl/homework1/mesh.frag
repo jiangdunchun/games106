@@ -9,6 +9,7 @@ layout (location = 1) in vec3 inColor;
 layout (location = 2) in vec2 inUV;
 layout (location = 3) in vec3 inViewVec;
 layout (location = 4) in vec3 inLightVec;
+layout (location = 5) in mat3 inTBN;
 
 layout (location = 0) out vec4 outFragColor;
 
@@ -18,7 +19,10 @@ void main()
 	vec4 normal = texture(samplerNormalMap, inUV);
 	vec4 metallicRoughness = texture(samplerMetallicRoughnessMap, inUV);
 
-	outFragColor = color + normal + metallicRoughness;
+	vec3 N = normalize(inverse(inTBN) * (normal.rgb * 2.0f - 1.0f));
+	outFragColor = vec4(N, 1.0);
+
+	//outFragColor = color + normal + metallicRoughness;
 
 /*
 	vec3 N = normalize(inNormal);
