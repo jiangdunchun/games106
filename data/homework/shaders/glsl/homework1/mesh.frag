@@ -1,6 +1,8 @@
 #version 450
 
 layout (set = 1, binding = 0) uniform sampler2D samplerColorMap;
+layout (set = 1, binding = 1) uniform sampler2D samplerNormalMap;
+layout (set = 1, binding = 2) uniform sampler2D samplerMetallicRoughnessMap;
 
 layout (location = 0) in vec3 inNormal;
 layout (location = 1) in vec3 inColor;
@@ -13,7 +15,12 @@ layout (location = 0) out vec4 outFragColor;
 void main() 
 {
 	vec4 color = texture(samplerColorMap, inUV) * vec4(inColor, 1.0);
+	vec4 normal = texture(samplerNormalMap, inUV);
+	vec4 metallicRoughness = texture(samplerMetallicRoughnessMap, inUV);
 
+	outFragColor = color + normal + metallicRoughness;
+
+/*
 	vec3 N = normalize(inNormal);
 	vec3 L = normalize(inLightVec);
 	vec3 V = normalize(inViewVec);
@@ -21,4 +28,5 @@ void main()
 	vec3 diffuse = max(dot(N, L), 0.15) * inColor;
 	vec3 specular = pow(max(dot(R, V), 0.0), 16.0) * vec3(0.75);
 	outFragColor = vec4(diffuse * color.rgb + specular, 1.0);		
+*/
 }
