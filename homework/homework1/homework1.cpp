@@ -42,6 +42,7 @@ public:
 	struct Vertex {
 		glm::vec3 pos;
 		glm::vec3 normal;
+		glm::vec3 tangent;
 		glm::vec2 uv;
 		glm::vec3 color;
 	};
@@ -249,6 +250,7 @@ public:
 				{
 					const float* positionBuffer = nullptr;
 					const float* normalsBuffer = nullptr;
+					const float* tangentsBuffer = nullptr;
 					const float* texCoordsBuffer = nullptr;
 					size_t vertexCount = 0;
 
@@ -265,6 +267,11 @@ public:
 						const tinygltf::BufferView& view = input.bufferViews[accessor.bufferView];
 						normalsBuffer = reinterpret_cast<const float*>(&(input.buffers[view.buffer].data[accessor.byteOffset + view.byteOffset]));
 					}
+					if (glTFPrimitive.attributes.find("TANGENT") != glTFPrimitive.attributes.end()) {
+						const tinygltf::Accessor& accessor = input.accessors[glTFPrimitive.attributes.find("TANGENT")->second];
+						const tinygltf::BufferView& view = input.bufferViews[accessor.bufferView];
+						tangentsBuffer = reinterpret_cast<const float*>(&(input.buffers[view.buffer].data[accessor.byteOffset + view.byteOffset]));
+					}
 					// Get buffer data for vertex texture coordinates
 					// glTF supports multiple sets, we only load the first one
 					if (glTFPrimitive.attributes.find("TEXCOORD_0") != glTFPrimitive.attributes.end()) {
@@ -278,6 +285,7 @@ public:
 						Vertex vert{};
 						vert.pos = glm::vec4(glm::make_vec3(&positionBuffer[v * 3]), 1.0f);
 						vert.normal = glm::normalize(glm::vec3(normalsBuffer ? glm::make_vec3(&normalsBuffer[v * 3]) : glm::vec3(0.0f)));
+						vert.tangent = glm::normalize(glm::vec3(tangentsBuffer ? glm::make_vec3(&tangentsBuffer[v * 3]) : glm::vec3(0.0f)));
 						vert.uv = texCoordsBuffer ? glm::make_vec2(&texCoordsBuffer[v * 2]) : glm::vec3(0.0f);
 						vert.color = glm::vec3(1.0f);
 						vertexBuffer.push_back(vert);
@@ -694,8 +702,9 @@ public:
 		const std::vector<VkVertexInputAttributeDescription> vertexInputAttributes = {
 			vks::initializers::vertexInputAttributeDescription(0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(VulkanglTFModel::Vertex, pos)),	// Location 0: Position
 			vks::initializers::vertexInputAttributeDescription(0, 1, VK_FORMAT_R32G32B32_SFLOAT, offsetof(VulkanglTFModel::Vertex, normal)),// Location 1: Normal
-			vks::initializers::vertexInputAttributeDescription(0, 2, VK_FORMAT_R32G32B32_SFLOAT, offsetof(VulkanglTFModel::Vertex, uv)),	// Location 2: Texture coordinates
-			vks::initializers::vertexInputAttributeDescription(0, 3, VK_FORMAT_R32G32B32_SFLOAT, offsetof(VulkanglTFModel::Vertex, color)),	// Location 3: Color
+			vks::initializers::vertexInputAttributeDescription(0, 2, VK_FORMAT_R32G32B32_SFLOAT, offsetof(VulkanglTFModel::Vertex, tangent)),// Location 2: Tangent
+			vks::initializers::vertexInputAttributeDescription(0, 3, VK_FORMAT_R32G32B32_SFLOAT, offsetof(VulkanglTFModel::Vertex, uv)),	// Location 3: Texture coordinates
+			vks::initializers::vertexInputAttributeDescription(0, 4, VK_FORMAT_R32G32B32_SFLOAT, offsetof(VulkanglTFModel::Vertex, color)),	// Location 4: Color
 		};
 		VkPipelineVertexInputStateCreateInfo vertexInputStateCI = vks::initializers::pipelineVertexInputStateCreateInfo();
 		vertexInputStateCI.vertexBindingDescriptionCount = static_cast<uint32_t>(vertexInputBindings.size());
