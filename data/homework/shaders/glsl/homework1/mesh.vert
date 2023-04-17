@@ -39,9 +39,9 @@ void main()
 	outLightVec = uboScene.lightPos.xyz - pos.xyz;
 	outViewVec = uboScene.viewPos.xyz - pos.xyz;	
 
-	mat3 model_mat = mat3(transpose(inverse(primitive.model)));
-    vec3 T = normalize(model_mat * inTangent);
-    vec3 N = normalize(model_mat * inNormal);
-    vec3 B = normalize(cross(N,T));
+	vec3 N = normalize(vec3(primitive.model * vec4(inNormal,   0.0)));
+    vec3 T = normalize(vec3(primitive.model * vec4(inTangent, 0.0)));
+	T = normalize(T - dot(T, N) * N);
+    vec3 B = cross(N, T);
     outTBN = transpose(mat3(T, B, N));
 }
