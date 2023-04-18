@@ -93,8 +93,10 @@ public:
 	struct Material {
 		glm::vec4 baseColorFactor = glm::vec4(1.0f);
 		uint32_t baseColorTextureIndex;
-		uint32_t normalTextureIndex;
-		uint32_t pbrMetallicRoughnessTextureIndex;
+		uint32_t normalTextureIndex = -1;
+		double pbrMetallic;
+		double pbrRoughness;
+		uint32_t pbrMetallicRoughnessTextureIndex = -1;
 	};
 
 	// Contains the texture for a single glTF image
@@ -203,6 +205,8 @@ public:
 			}
 
 			materials[i].normalTextureIndex = glTFMaterial.normalTexture.index;
+			materials[i].pbrMetallic = glTFMaterial.pbrMetallicRoughness.metallicFactor;
+			materials[i].pbrRoughness = glTFMaterial.pbrMetallicRoughness.roughnessFactor;
 			materials[i].pbrMetallicRoughnessTextureIndex = glTFMaterial.pbrMetallicRoughness.metallicRoughnessTexture.index;
 		}
 	}
@@ -604,7 +608,8 @@ public:
 
 	void loadAssets()
 	{
-		loadglTFFile(getAssetPath() + "models/FlightHelmet/glTF/FlightHelmet.gltf");
+		//loadglTFFile(getAssetPath() + "models/FlightHelmet/glTF/FlightHelmet.gltf");
+		loadglTFFile(getAssetPath() + "models/CesiumMan/glTF/CesiumMan.gltf");
 	}
 
 	void setupDescriptors()
@@ -664,21 +669,28 @@ public:
 			const VkDescriptorSetAllocateInfo allocInfo = vks::initializers::descriptorSetAllocateInfo(descriptorPool, &descriptorSetLayouts.textures, 1);
 			VkDescriptorSet descriptorSet;
 			VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, &descriptorSet));
-			std::vector<VkWriteDescriptorSet> writeDescriptorSets(3);
+			std::vector<VkWriteDescriptorSet> writeDescriptorSets;
 			{
 				auto& image = glTFModel.images[material.baseColorTextureIndex];
 				image.descriptorSet = descriptorSet;
-				writeDescriptorSets[0] = vks::initializers::writeDescriptorSet(image.descriptorSet, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 0, &image.texture.descriptor);
+				VkWriteDescriptorSet writeDescriptorSet = vks::initializers::writeDescriptorSet(image.descriptorSet, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 0, &image.texture.descriptor);
+				writeDescriptorSets.push_back(writeDescriptorSet); 
 			}
 			{
-				auto& image = glTFModel.images[material.normalTextureIndex];
-				image.descriptorSet = descriptorSet;
-				writeDescriptorSets[1] = vks::initializers::writeDescriptorSet(image.descriptorSet, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, &image.texture.descriptor);
+				if (-1 != material.normalTextureIndex) {
+					auto& image = glTFModel.images[material.normalTextureIndex];
+					image.descriptorSet = descriptorSet;
+					VkWriteDescriptorSet writeDescriptorSet = vks::initializers::writeDescriptorSet(image.descriptorSet, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, &image.texture.descriptor);
+					writeDescriptorSets.push_back(writeDescriptorSet);
+				}
 			}
 			{
-				auto& image = glTFModel.images[material.pbrMetallicRoughnessTextureIndex];
-				image.descriptorSet = descriptorSet;
-				writeDescriptorSets[2] = vks::initializers::writeDescriptorSet(image.descriptorSet, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2, &image.texture.descriptor);
+				if (-1 != material.pbrMetallicRoughnessTextureIndex) {
+					auto& image = glTFModel.images[material.pbrMetallicRoughnessTextureIndex];
+					image.descriptorSet = descriptorSet;
+					VkWriteDescriptorSet writeDescriptorSet = vks::initializers::writeDescriptorSet(image.descriptorSet, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2, &image.texture.descriptor);
+					writeDescriptorSets.push_back(writeDescriptorSet);
+				}
 			}
 			vkUpdateDescriptorSets(device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, nullptr);
 		}
