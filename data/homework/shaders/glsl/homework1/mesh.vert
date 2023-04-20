@@ -28,19 +28,19 @@ layout (location = 5) out mat3 outTBN;
 
 void main() 
 {
-	outNormal = inNormal;
 	outColor = inColor;
 	outUV = inUV;
 	gl_Position = uboScene.projection * uboScene.view * primitive.model * vec4(inPos.xyz, 1.0);
 	
-	vec4 pos = uboScene.view * vec4(inPos, 1.0);
-	outNormal = mat3(uboScene.view) * inNormal;
-	vec3 lPos = mat3(uboScene.view) * uboScene.lightPos.xyz;
-	outLightVec = uboScene.lightPos.xyz - pos.xyz;
-	outViewVec = uboScene.viewPos.xyz - pos.xyz;	
+	mat4 mv = uboScene.view * primitive.model;
 
-	vec3 N = normalize(vec3(primitive.model * vec4(inNormal,   0.0)));
-    vec3 T = normalize(vec3(primitive.model * vec4(inTangent, 0.0)));
+	vec3 pos = (mv * vec4(inPos.xyz, 1.0)).xyz;
+	outNormal = mat3(mv) * inNormal;
+	outLightVec = (uboScene.view * uboScene.lightPos).xyz - pos;
+	outViewVec = -pos;	
+
+	vec3 N = normalize(mat3(mv) * inNormal);
+    vec3 T = normalize(mat3(mv) * inTangent);
 	T = normalize(T - dot(T, N) * N);
     vec3 B = cross(N, T);
     outTBN = transpose(mat3(T, B, N));
