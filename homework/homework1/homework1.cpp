@@ -29,6 +29,8 @@
 
 #define ENABLE_VALIDATION false
 
+float time_stamp__ = 0.0f;
+
 // Contains everything required to render a glTF model in Vulkan
 // This class is heavily simplified (compared to glTF's feature set) but retains the basic glTF structure
 class VulkanglTFModel
@@ -76,9 +78,22 @@ public:
 		std::vector<Primitive> primitives;
 	};
 
+	struct Transform {
+		glm::vec3 position;
+		glm::quat rotation;
+		glm::vec3 scale;
+	};
+
+	struct NodeAnination {
+		float length;
+		std::vector<float> times;
+		std::vector<Transform> transforms;
+	};
+
 	// A node represents an object in the glTF scene graph
 	struct Node {
 		Node* parent;
+		NodeAnination* animation = nullptr;
 		std::vector<Node*> children;
 		Mesh mesh;
 		glm::mat4 matrix;
@@ -120,6 +135,7 @@ public:
 	std::vector<Texture> textures;
 	std::vector<Material> materials;
 	std::vector<Node*> nodes;
+	std::vector<NodeAnination> animations;
 
 	~VulkanglTFModel()
 	{
@@ -347,6 +363,13 @@ public:
 		}
 	}
 
+	void loadAnination(tinygltf::Model& input) {
+		for (size_t i = 0; i < input.animations.size(); i++) {
+			tinygltf::Animation& glTFAnimation = input.animations[i];
+			
+		}
+	}
+
 	/*
 		glTF rendering functions
 	*/
@@ -357,6 +380,34 @@ public:
 		if (node->mesh.primitives.size() > 0) {
 			// Pass the node's matrix via push constants
 			// Traverse the node hierarchy to the top-most parent to get the final matrix of the current node
+			if (node->animation) {
+				float lap_time = time_stamp__ - (int)(time_stamp__ / node->animation->length) * node->animation->length;
+				int l = 0;
+				int r = node->animation->times.size() - 1;
+				float alpha;
+				if (lap_time <= node->animation->times[l]) {
+					alpha = 1;
+				}
+				else if (lap_time >= node->animation->times[r]) {
+					alpha = 0;
+				}
+				else {
+					while (l < r - 1) {
+						int m = (l + r) / 2;
+						if (node->animation->times[m] > lap_time) r = m;
+						else l = m;
+					}
+					alpha = (node->animation->times[r] - lap_time) / (node->animation->times[r] - node->animation->times[l]);
+				}
+				glm::vec3 position = glm::mix(node->animation->transforms[l].position, node->animation->transforms[r].position, alpha);
+				glm::quat rotation = glm::slerp(node->animation->transforms[l].rotation, node->animation->transforms[r].rotation, alpha);
+				glm::vec3 scale = glm::mix(node->animation->transforms[l].scale, node->animation->transforms[r].scale, alpha);
+
+				node->matrix = glm::mat4(1.0f);
+				node->matrix = glm::translate(node->matrix, position);
+				node->matrix *= glm::mat4(rotation);
+				node->matrix = glm::scale(node->matrix, scale);
+			}
 			glm::mat4 nodeMatrix = node->matrix;
 			VulkanglTFModel::Node* currentParent = node->parent;
 			while (currentParent) {
@@ -527,6 +578,7 @@ public:
 				const tinygltf::Node node = glTFInput.nodes[scene.nodes[i]];
 				glTFModel.loadNode(node, glTFInput, nullptr, indexBuffer, vertexBuffer);
 			}
+			glTFModel.loadAnination(glTFInput);
 		}
 		else {
 			vks::tools::exitFatal("Could not open the glTF file.\n\nThe file is part of the additional asset pack.\n\nRun \"download_assets.py\" in the repository root to download the latest version.", -1);
@@ -788,6 +840,7 @@ public:
 
 	virtual void render()
 	{
+		time_stamp__ += 0.001f;
 		renderFrame();
 		if (camera.updated) {
 			updateUniformBuffers();
