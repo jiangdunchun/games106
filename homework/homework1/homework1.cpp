@@ -78,22 +78,18 @@ public:
 		std::vector<Primitive> primitives;
 	};
 
-	struct Transform {
-		glm::vec3 position;
-		glm::quat rotation;
-		glm::vec3 scale;
-	};
-
 	struct NodeAnination {
-		float length;
+		float length = 0.f;
 		std::vector<float> times;
-		std::vector<Transform> transforms;
+		std::vector<glm::vec3> positions;
+		std::vector<glm::quat> rotations;
+		std::vector<glm::vec3> scales;
 	};
 
 	// A node represents an object in the glTF scene graph
 	struct Node {
 		Node* parent;
-		NodeAnination* animation = nullptr;
+		int animation_index = -1;
 		std::vector<Node*> children;
 		Mesh mesh;
 		glm::mat4 matrix;
@@ -136,6 +132,7 @@ public:
 	std::vector<Material> materials;
 	std::vector<Node*> nodes;
 	std::vector<NodeAnination> animations;
+	std::map<std::string, Node*> nodes_map;
 
 	~VulkanglTFModel()
 	{
@@ -361,12 +358,59 @@ public:
 		else {
 			nodes.push_back(node);
 		}
+
+		nodes_map[inputNode.name] = node;
 	}
 
 	void loadAnination(tinygltf::Model& input) {
 		for (size_t i = 0; i < input.animations.size(); i++) {
 			tinygltf::Animation& glTFAnimation = input.animations[i];
-			
+			for (auto& channel : glTFAnimation.channels) {
+				Node* node = nodes_map[input.nodes[channel.target_node].name];
+				NodeAnination* animation = nullptr;
+				if (-1 != node->animation_index) animation = &animations[node->animation_index];
+				else {
+					int animation_index = animations.size();
+					animations.push_back({});
+					animation = &animations[animation_index];
+					node->animation_index = animation_index;
+				}
+
+				auto& sampler = glTFAnimation.samplers[channel.sampler];
+				if (0.f == animation->length) {
+					auto& t_accessor = input.accessors[sampler.input];
+					animation->length = t_accessor.maxValues[0];
+
+					auto& t_buffer_view = input.bufferViews[t_accessor.bufferView];
+					auto& t_buffer = input.buffers[t_buffer_view.buffer];
+
+					const float* data_ptr = reinterpret_cast<const float*>(&t_buffer.data[t_accessor.byteOffset + t_buffer_view.byteOffset]);
+					for (size_t index = 0; index < t_accessor.count; index++) {
+						animation->times.push_back(data_ptr[index]);
+					}
+				}
+
+				auto& v_accessor = input.accessors[sampler.output];
+				auto& v_buffer_view = input.bufferViews[v_accessor.bufferView];
+				auto& v_buffer = input.buffers[v_buffer_view.buffer];
+
+				const float* data_ptr = reinterpret_cast<const float*>(&v_buffer.data[v_accessor.byteOffset + v_buffer_view.byteOffset]);
+				if ("translation" == channel.target_path) {
+					for (size_t index = 0; index < v_accessor.count; index++) {
+						animation->positions.push_back({ data_ptr[3 * index], data_ptr[3 * index + 1], data_ptr[3 * index + 2] });
+					}
+				}
+				else if ("rotation" == channel.target_path) {
+					for (size_t index = 0; index < v_accessor.count; index++) {
+						animation->rotations.push_back(glm::make_quat(&data_ptr[4 * index]));
+					}
+				}
+				else {
+					for (size_t index = 0; index < v_accessor.count; index++) {
+						animation->scales.push_back({ data_ptr[3 * index], data_ptr[3 * index + 1], data_ptr[3 * index + 2] });
+					}
+				}
+			}
 		}
 	}
 
@@ -377,37 +421,41 @@ public:
 	// Draw a single node including child nodes (if present)
 	void drawNode(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, VulkanglTFModel::Node* node)
 	{
-		if (node->mesh.primitives.size() > 0) {
-			// Pass the node's matrix via push constants
-			// Traverse the node hierarchy to the top-most parent to get the final matrix of the current node
-			if (node->animation) {
-				float lap_time = time_stamp__ - (int)(time_stamp__ / node->animation->length) * node->animation->length;
+		// Traverse the node hierarchy to the top-most parent to get the final matrix of the current node
+		if (-1 != node->animation_index) {
+			NodeAnination& animation = animations[node->animation_index];
+			if (0 != animation.times.size()) {
+				float lap_time = time_stamp__ - (int)(time_stamp__ / animation.length) * animation.length;
 				int l = 0;
-				int r = node->animation->times.size() - 1;
+				int r = animation.times.size() - 1;
 				float alpha;
-				if (lap_time <= node->animation->times[l]) {
+				if (lap_time <= animation.times[l]) {
 					alpha = 1;
 				}
-				else if (lap_time >= node->animation->times[r]) {
+				else if (lap_time >= animation.times[r]) {
 					alpha = 0;
 				}
 				else {
 					while (l < r - 1) {
 						int m = (l + r) / 2;
-						if (node->animation->times[m] > lap_time) r = m;
+						if (animation.times[m] > lap_time) r = m;
 						else l = m;
 					}
-					alpha = (node->animation->times[r] - lap_time) / (node->animation->times[r] - node->animation->times[l]);
+					alpha = (animation.times[r] - lap_time) / (animation.times[r] - animation.times[l]);
 				}
-				glm::vec3 position = glm::mix(node->animation->transforms[l].position, node->animation->transforms[r].position, alpha);
-				glm::quat rotation = glm::slerp(node->animation->transforms[l].rotation, node->animation->transforms[r].rotation, alpha);
-				glm::vec3 scale = glm::mix(node->animation->transforms[l].scale, node->animation->transforms[r].scale, alpha);
+				glm::vec3 position = glm::mix(animation.positions[l], animation.positions[r], alpha);
+				glm::quat rotation = glm::slerp(animation.rotations[l], animation.rotations[r], alpha);
+				glm::vec3 scale = glm::mix(animation.scales[l], animation.scales[r], alpha);
 
 				node->matrix = glm::mat4(1.0f);
 				node->matrix = glm::translate(node->matrix, position);
 				node->matrix *= glm::mat4(rotation);
 				node->matrix = glm::scale(node->matrix, scale);
 			}
+		}
+
+		if (node->mesh.primitives.size() > 0) {
+			// Pass the node's matrix via push constants
 			glm::mat4 nodeMatrix = node->matrix;
 			VulkanglTFModel::Node* currentParent = node->parent;
 			while (currentParent) {
