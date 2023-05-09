@@ -441,7 +441,7 @@ public:
 						if (animation.times[m] > lap_time) r = m;
 						else l = m;
 					}
-					alpha = (animation.times[r] - lap_time) / (animation.times[r] - animation.times[l]);
+					alpha = (lap_time - animation.times[l]) / (animation.times[r] - animation.times[l]);
 				}
 				glm::vec3 position = glm::mix(animation.positions[l], animation.positions[r], alpha);
 				glm::quat rotation = glm::slerp(animation.rotations[l], animation.rotations[r], alpha);
@@ -888,6 +888,7 @@ public:
 
 	virtual void render()
 	{
+		buildCommandBuffers();
 		time_stamp__ += 0.001f;
 		renderFrame();
 		if (camera.updated) {
