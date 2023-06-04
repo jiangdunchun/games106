@@ -1,0 +1,73 @@
+#version 450
+int SHADING_RATE_MAP[3][3] = {{5,7,7},{6, 8, 10},{6,9,11}};
+ 
+layout (binding = 0, r8i) uniform iimage2D u_vrs; 
+layout (binding = 1, rgba16f) uniform image2D u_color; 
+ 
+layout (local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+#define TILE_SIZE 16
+
+#define LUMA_WEIGHT vec3(0.299, 0.587, 0.114);
+
+#define T 0.15
+#define L 0.05
+#define K 0.1
+
+void main(void){
+    ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
+
+    float luma[TILE_SIZE][TILE_SIZE];
+    float luma_avg = 0;
+    for (int i = 0; i < TILE_SIZE; ++i) {
+        for (int j = 0; j < TILE_SIZE; ++j) {
+            ivec2 uv = pos * TILE_SIZE + ivec2(i, j);
+            vec3 luma_v3 = imageLoad(u_color, uv).rgb * LUMA_WEIGHT;
+            luma[i][j] = luma_v3.x + luma_v3.y + luma_v3.z;
+            luma_avg +=  luma[i][j];
+        }
+    }
+    luma_avg /= TILE_SIZE * TILE_SIZE;
+
+    float eksema_v[TILE_SIZE];
+    float eksema_h[TILE_SIZE];
+     for (int i = 0; i < TILE_SIZE; ++i) {
+        eksema_v[i] = 0;
+        eksema_h[i] = 0;
+        for (int j = 1; j < TILE_SIZE; ++j) {
+            eksema_h[i] += pow((luma[i][j] - luma[i][j - 1]) / 2,2);
+            eksema_v[i] += pow((luma[j][i] - luma[j - 1][i]) / 2,2);
+        }
+    }
+    for (int i = 0; i < TILE_SIZE; ++i) {
+        eksema_v[i] = sqrt(eksema_v[i] / (TILE_SIZE - 1));
+        eksema_h[i] = sqrt(eksema_h[i] / (TILE_SIZE - 1));
+    }
+
+    float tor = T * (luma_avg + L);
+
+    int shading_rate_v = 2;
+    int shading_rate_h = 2;
+    for (int i = 0; i < TILE_SIZE; ++i) {
+        if (K * eksema_v[i] >= tor) {
+            if (eksema_v[i] >= tor) {
+                shading_rate_v = min(shading_rate_v, 0);
+            }
+            else {
+                shading_rate_v = min(shading_rate_v, 1);
+            }
+        }
+
+        if (K * eksema_h[i] >= tor) {
+            if (eksema_h[i] >= tor) {
+                shading_rate_h = min(shading_rate_h, 0);
+            }
+            else {
+                shading_rate_h = min(shading_rate_h, 1);
+            }
+        }
+    }
+
+    int shading_rate = SHADING_RATE_MAP[shading_rate_v][shading_rate_h];
+    imageStore(u_vrs, pos, ivec4(shading_rate, 0, 0, 0));
+}

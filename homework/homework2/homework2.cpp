@@ -10,430 +10,739 @@
 
 VulkanExample::VulkanExample() : VulkanExampleBase(ENABLE_VALIDATION)
 {
-	title = "Variable rate shading";
-	apiVersion = VK_API_VERSION_1_1;
-	camera.type = Camera::CameraType::firstperson;
-	camera.flipY = true;
-	camera.setPosition(glm::vec3(0.0f, 1.0f, 0.0f));
-	camera.setRotation(glm::vec3(0.0f, -90.0f, 0.0f));
-	camera.setPerspective(60.0f, (float)width / (float)height, 0.1f, 256.0f);
-	camera.setRotationSpeed(0.25f);
-	enabledInstanceExtensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-	enabledDeviceExtensions.push_back(VK_NV_SHADING_RATE_IMAGE_EXTENSION_NAME);
+    title = "Variable rate shading";
+    apiVersion = VK_API_VERSION_1_1;
+    camera.type = Camera::CameraType::firstperson;
+    camera.flipY = true;
+    camera.setPosition(glm::vec3(0.0f, 1.0f, 0.0f));
+    camera.setRotation(glm::vec3(0.0f, -90.0f, 0.0f));
+    camera.setPerspective(60.0f, (float)width / (float)height, 0.1f, 256.0f);
+    camera.setRotationSpeed(0.25f);
+    enabledInstanceExtensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    enabledDeviceExtensions.push_back(VK_NV_SHADING_RATE_IMAGE_EXTENSION_NAME);
 }
 
 VulkanExample::~VulkanExample()
 {
-	vkDestroyPipeline(device, basePipelines.masked, nullptr);
-	vkDestroyPipeline(device, basePipelines.opaque, nullptr);
-	vkDestroyPipeline(device, shadingRatePipelines.masked, nullptr);
-	vkDestroyPipeline(device, shadingRatePipelines.opaque, nullptr);
-	vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
-	vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
-	vkDestroyImageView(device, shadingRateImage.view, nullptr);
-	vkDestroyImage(device, shadingRateImage.image, nullptr);
-	vkFreeMemory(device, shadingRateImage.memory, nullptr);
-	shaderData.buffer.destroy();
+    vkDestroyPipeline(device, basePipelines.masked, nullptr);
+    vkDestroyPipeline(device, basePipelines.opaque, nullptr);
+    vkDestroyPipeline(device, shadingRatePipelines.masked, nullptr);
+    vkDestroyPipeline(device, shadingRatePipelines.opaque, nullptr);
+    vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
+    vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
+    vkDestroyImageView(device, vrsShadingRateImage.view, nullptr);
+    vkDestroyImage(device, vrsShadingRateImage.image, nullptr);
+    vkFreeMemory(device, vrsShadingRateImage.memory, nullptr);
+    shaderData.buffer.destroy();
+
+
+    //vkDestroyPipeline(device, compute.pipeline, nullptr);
+    //vkDestroyPipelineLayout(device, compute.pipelineLayout, nullptr);
+    //vkDestroyDescriptorSetLayout(device, compute.descriptorSetLayout, nullptr);
+    //vkDestroySemaphore(device, compute.semaphore, nullptr);
+    //vkDestroyCommandPool(device, compute.commandPool, nullptr);
 }
 
 void VulkanExample::getEnabledFeatures()
 {
-	enabledFeatures.samplerAnisotropy = deviceFeatures.samplerAnisotropy;
-	// POI
-	enabledPhysicalDeviceShadingRateImageFeaturesNV = {};
-	enabledPhysicalDeviceShadingRateImageFeaturesNV.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADING_RATE_IMAGE_FEATURES_NV;
-	enabledPhysicalDeviceShadingRateImageFeaturesNV.shadingRateImage = VK_TRUE;
-	deviceCreatepNextChain = &enabledPhysicalDeviceShadingRateImageFeaturesNV;
+    enabledFeatures.samplerAnisotropy = deviceFeatures.samplerAnisotropy;
+    // POI
+    enabledPhysicalDeviceShadingRateImageFeaturesNV = {};
+    enabledPhysicalDeviceShadingRateImageFeaturesNV.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADING_RATE_IMAGE_FEATURES_NV;
+    enabledPhysicalDeviceShadingRateImageFeaturesNV.shadingRateImage = VK_TRUE;
+    deviceCreatepNextChain = &enabledPhysicalDeviceShadingRateImageFeaturesNV;
 }
 
 /*
-	If the window has been resized, we need to recreate the shading rate image
+    If the window has been resized, we need to recreate the shading rate image
 */
 void VulkanExample::handleResize()
 {
-	// Delete allocated resources
-	vkDestroyImageView(device, shadingRateImage.view, nullptr);
-	vkDestroyImage(device, shadingRateImage.image, nullptr);
-	vkFreeMemory(device, shadingRateImage.memory, nullptr);
-	// Recreate image
-	prepareShadingRateImage();
-	resized = false;
+    // Delete allocated resources
+    vkDestroyImageView(device, vrsShadingRateImage.view, nullptr);
+    vkDestroyImage(device, vrsShadingRateImage.image, nullptr);
+    vkFreeMemory(device, vrsShadingRateImage.memory, nullptr);
+    // Recreate image
+    prepareShadingRateImage();
+    resized = false;
 }
 
 void VulkanExample::buildCommandBuffers()
 {
-	if (resized)
-	{
-		handleResize();
-	}
+    if (resized)
+    {
+        handleResize();
+    }
 
-	VkCommandBufferBeginInfo cmdBufInfo = vks::initializers::commandBufferBeginInfo();
+    VkCommandBufferBeginInfo cmdBufInfo = vks::initializers::commandBufferBeginInfo();
 
-	VkClearValue clearValues[2];
-	clearValues[0].color = defaultClearColor;
-	clearValues[0].color = { { 0.25f, 0.25f, 0.25f, 1.0f } };;
-	clearValues[1].depthStencil = { 1.0f, 0 };
+    VkClearValue clearValues[2];
+    clearValues[0].color = defaultClearColor;
+    clearValues[0].color = { { 0.25f, 0.25f, 0.25f, 1.0f } };;
+    clearValues[1].depthStencil = { 1.0f, 0 };
 
-	VkRenderPassBeginInfo renderPassBeginInfo = vks::initializers::renderPassBeginInfo();
-	renderPassBeginInfo.renderPass = renderPass;
-	renderPassBeginInfo.renderArea.offset.x = 0;
-	renderPassBeginInfo.renderArea.offset.y = 0;
-	renderPassBeginInfo.renderArea.extent.width = width;
-	renderPassBeginInfo.renderArea.extent.height = height;
-	renderPassBeginInfo.clearValueCount = 2;
-	renderPassBeginInfo.pClearValues = clearValues;
+    VkRenderPassBeginInfo renderPassBeginInfo = vks::initializers::renderPassBeginInfo();
+    renderPassBeginInfo.renderPass = renderPass;
+    renderPassBeginInfo.renderArea.offset.x = 0;
+    renderPassBeginInfo.renderArea.offset.y = 0;
+    renderPassBeginInfo.renderArea.extent.width = width;
+    renderPassBeginInfo.renderArea.extent.height = height;
+    renderPassBeginInfo.clearValueCount = 2;
+    renderPassBeginInfo.pClearValues = clearValues;
 
-	const VkViewport viewport = vks::initializers::viewport((float)width, (float)height, 0.0f, 1.0f);
-	const VkRect2D scissor = vks::initializers::rect2D(width, height, 0, 0);
+    const VkViewport viewport = vks::initializers::viewport((float)width, (float)height, 0.0f, 1.0f);
+    const VkRect2D scissor = vks::initializers::rect2D(width, height, 0, 0);
 
-	for (int32_t i = 0; i < drawCmdBuffers.size(); ++i)
-	{
-		renderPassBeginInfo.framebuffer = frameBuffers[i];
-		VK_CHECK_RESULT(vkBeginCommandBuffer(drawCmdBuffers[i], &cmdBufInfo));
-		vkCmdBeginRenderPass(drawCmdBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
-		vkCmdSetViewport(drawCmdBuffers[i], 0, 1, &viewport);
-		vkCmdSetScissor(drawCmdBuffers[i], 0, 1, &scissor);
-		vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
+    for (int32_t i = 0; i < drawCmdBuffers.size(); ++i)
+    {
+        renderPassBeginInfo.framebuffer = frameBuffers[i];
+        VK_CHECK_RESULT(vkBeginCommandBuffer(drawCmdBuffers[i], &cmdBufInfo));
+        vkCmdBeginRenderPass(drawCmdBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdSetViewport(drawCmdBuffers[i], 0, 1, &viewport);
+        vkCmdSetScissor(drawCmdBuffers[i], 0, 1, &scissor);
+        vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
 
-		// POI: Bind the image that contains the shading rate patterns
-		if (enableShadingRate) {
-			vkCmdBindShadingRateImageNV(drawCmdBuffers[i], shadingRateImage.view, VK_IMAGE_LAYOUT_SHADING_RATE_OPTIMAL_NV);
-		};
+        // POI: Bind the image that contains the shading rate patterns
+        if (enableShadingRate) {
+            vkCmdBindShadingRateImageNV(drawCmdBuffers[i], vrsShadingRateImage.view, VK_IMAGE_LAYOUT_SHADING_RATE_OPTIMAL_NV);
+        };
 
-		// Render the scene
-		Pipelines& pipelines = enableShadingRate ? shadingRatePipelines : basePipelines;
-		vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.opaque);
-		scene.draw(drawCmdBuffers[i], vkglTF::RenderFlags::BindImages | vkglTF::RenderFlags::RenderOpaqueNodes, pipelineLayout);
-		vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.masked);
-		scene.draw(drawCmdBuffers[i], vkglTF::RenderFlags::BindImages | vkglTF::RenderFlags::RenderAlphaMaskedNodes, pipelineLayout);
+        // Render the scene
+        Pipelines& pipelines = enableShadingRate ? shadingRatePipelines : basePipelines;
+        vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.opaque);
+        scene.draw(drawCmdBuffers[i], vkglTF::RenderFlags::BindImages | vkglTF::RenderFlags::RenderOpaqueNodes, pipelineLayout);
+        vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.masked);
+        scene.draw(drawCmdBuffers[i], vkglTF::RenderFlags::BindImages | vkglTF::RenderFlags::RenderAlphaMaskedNodes, pipelineLayout);
 
-		drawUI(drawCmdBuffers[i]);
-		vkCmdEndRenderPass(drawCmdBuffers[i]);
-		VK_CHECK_RESULT(vkEndCommandBuffer(drawCmdBuffers[i]));
-	}
+        copyColorAttachment(drawCmdBuffers[i], swapChain.images[i]);
+
+        drawUI(drawCmdBuffers[i]);
+        vkCmdEndRenderPass(drawCmdBuffers[i]);
+        VK_CHECK_RESULT(vkEndCommandBuffer(drawCmdBuffers[i]));
+    }
 }
 
 void VulkanExample::loadAssets()
 {
-	vkglTF::descriptorBindingFlags = vkglTF::DescriptorBindingFlags::ImageBaseColor | vkglTF::DescriptorBindingFlags::ImageNormalMap;
-	scene.loadFromFile(getAssetPath() + "models/sponza/sponza.gltf", vulkanDevice, queue, vkglTF::FileLoadingFlags::PreTransformVertices);
+    vkglTF::descriptorBindingFlags = vkglTF::DescriptorBindingFlags::ImageBaseColor | vkglTF::DescriptorBindingFlags::ImageNormalMap;
+    scene.loadFromFile(getAssetPath() + "models/sponza/sponza.gltf", vulkanDevice, queue, vkglTF::FileLoadingFlags::PreTransformVertices);
 }
 
 void VulkanExample::setupDescriptors()
 {
-	// Pool
-	const std::vector<VkDescriptorPoolSize> poolSizes = {
-		vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1),
-	};
-	VkDescriptorPoolCreateInfo descriptorPoolInfo = vks::initializers::descriptorPoolCreateInfo(poolSizes, 1);
-	VK_CHECK_RESULT(vkCreateDescriptorPool(device, &descriptorPoolInfo, nullptr, &descriptorPool));
+    // Pool
+    const std::vector<VkDescriptorPoolSize> poolSizes = {
+        vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1),
+        vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 2),
+    };
+    VkDescriptorPoolCreateInfo descriptorPoolInfo =
+        vks::initializers::descriptorPoolCreateInfo(poolSizes, 2);
+    VK_CHECK_RESULT(vkCreateDescriptorPool(device, &descriptorPoolInfo, nullptr, &descriptorPool));
 
-	// Descriptor set layout
-	const std::vector<VkDescriptorSetLayoutBinding> setLayoutBindings = {
-		vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0),
-	};
-	VkDescriptorSetLayoutCreateInfo descriptorLayout = vks::initializers::descriptorSetLayoutCreateInfo(setLayoutBindings);
-	VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &descriptorLayout, nullptr, &descriptorSetLayout));
+    // Descriptor set layout
+    const std::vector<VkDescriptorSetLayoutBinding> setLayoutBindings = {
+        vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0),
+    };
+    VkDescriptorSetLayoutCreateInfo descriptorLayout = vks::initializers::descriptorSetLayoutCreateInfo(setLayoutBindings);
+    VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &descriptorLayout, nullptr, &descriptorSetLayout));
 
-	// Pipeline layout
-	const std::vector<VkDescriptorSetLayout> setLayouts = {
-		descriptorSetLayout,
-		vkglTF::descriptorSetLayoutImage,
-	};
-	VkPipelineLayoutCreateInfo pPipelineLayoutCreateInfo = vks::initializers::pipelineLayoutCreateInfo(setLayouts.data(), 2);
-	VK_CHECK_RESULT(vkCreatePipelineLayout(device, &pPipelineLayoutCreateInfo, nullptr, &pipelineLayout));
+    // Pipeline layout
+    const std::vector<VkDescriptorSetLayout> setLayouts = {
+        descriptorSetLayout,
+        vkglTF::descriptorSetLayoutImage,
+    };
+    VkPipelineLayoutCreateInfo pPipelineLayoutCreateInfo = vks::initializers::pipelineLayoutCreateInfo(setLayouts.data(), 2);
+    VK_CHECK_RESULT(vkCreatePipelineLayout(device, &pPipelineLayoutCreateInfo, nullptr, &pipelineLayout));
 
-	// Descriptor set
-	VkDescriptorSetAllocateInfo allocInfo = vks::initializers::descriptorSetAllocateInfo(descriptorPool, &descriptorSetLayout, 1);
-	VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, &descriptorSet));
-	std::vector<VkWriteDescriptorSet> writeDescriptorSets = {
-		vks::initializers::writeDescriptorSet(descriptorSet, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, &shaderData.buffer.descriptor),
-	};
-	vkUpdateDescriptorSets(device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, nullptr);
+    // Descriptor set
+    VkDescriptorSetAllocateInfo allocInfo = vks::initializers::descriptorSetAllocateInfo(descriptorPool, &descriptorSetLayout, 1);
+    VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, &descriptorSet));
+    std::vector<VkWriteDescriptorSet> writeDescriptorSets = {
+        vks::initializers::writeDescriptorSet(descriptorSet, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, &shaderData.buffer.descriptor),
+    };
+    vkUpdateDescriptorSets(device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, nullptr);
 }
 
 // [POI]
 void VulkanExample::prepareShadingRateImage()
 {
-	// Shading rate image size depends on shading rate texel size
-	// For each texel in the target image, there is a corresponding shading texel size width x height block in the shading rate image
-	VkExtent3D imageExtent{};
-	imageExtent.width = static_cast<uint32_t>(ceil(width / (float)physicalDeviceShadingRateImagePropertiesNV.shadingRateTexelSize.width));
-	imageExtent.height = static_cast<uint32_t>(ceil(height / (float)physicalDeviceShadingRateImagePropertiesNV.shadingRateTexelSize.height));
-	imageExtent.depth = 1;
+    // Shading rate image size depends on shading rate texel size
+    // For each texel in the target image, there is a corresponding shading texel size width x height block in the shading rate image
+    VkExtent3D imageExtent{};
+    imageExtent.width = static_cast<uint32_t>(ceil(width / (float)physicalDeviceShadingRateImagePropertiesNV.shadingRateTexelSize.width));
+    imageExtent.height = static_cast<uint32_t>(ceil(height / (float)physicalDeviceShadingRateImagePropertiesNV.shadingRateTexelSize.height));
+    imageExtent.depth = 1;
 
-	VkImageCreateInfo imageCI{};
-	imageCI.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-	imageCI.imageType = VK_IMAGE_TYPE_2D;
-	imageCI.format = VK_FORMAT_R8_UINT;
-	imageCI.extent = imageExtent;
-	imageCI.mipLevels = 1;
-	imageCI.arrayLayers = 1;
-	imageCI.samples = VK_SAMPLE_COUNT_1_BIT;
-	imageCI.tiling = VK_IMAGE_TILING_OPTIMAL;
-	imageCI.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-	imageCI.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-	imageCI.usage = VK_IMAGE_USAGE_SHADING_RATE_IMAGE_BIT_NV | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-	VK_CHECK_RESULT(vkCreateImage(device, &imageCI, nullptr, &shadingRateImage.image));
-	VkMemoryRequirements memReqs{};
-	vkGetImageMemoryRequirements(device, shadingRateImage.image, &memReqs);
-	
-	VkDeviceSize bufferSize = imageExtent.width * imageExtent.height * sizeof(uint8_t);
+    VkImageCreateInfo imageCI{};
+    imageCI.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    imageCI.imageType = VK_IMAGE_TYPE_2D;
+    imageCI.format = VK_FORMAT_R8_UINT;
+    imageCI.extent = imageExtent;
+    imageCI.mipLevels = 1;
+    imageCI.arrayLayers = 1;
+    imageCI.samples = VK_SAMPLE_COUNT_1_BIT;
+    imageCI.tiling = VK_IMAGE_TILING_OPTIMAL;
+    imageCI.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    imageCI.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    imageCI.usage = VK_IMAGE_USAGE_SHADING_RATE_IMAGE_BIT_NV | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
+    VK_CHECK_RESULT(vkCreateImage(device, &imageCI, nullptr, &vrsShadingRateImage.image));
+    VkMemoryRequirements memReqs{};
+    vkGetImageMemoryRequirements(device, vrsShadingRateImage.image, &memReqs);
 
-	VkMemoryAllocateInfo memAllloc{};
-	memAllloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-	memAllloc.allocationSize = memReqs.size;
-	memAllloc.memoryTypeIndex = vulkanDevice->getMemoryType(memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-	VK_CHECK_RESULT(vkAllocateMemory(device, &memAllloc, nullptr, &shadingRateImage.memory));
-	VK_CHECK_RESULT(vkBindImageMemory(device, shadingRateImage.image, shadingRateImage.memory, 0));
+    VkDeviceSize bufferSize = imageExtent.width * imageExtent.height * sizeof(uint8_t);
 
-	VkImageViewCreateInfo imageViewCI{};
-	imageViewCI.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-	imageViewCI.viewType = VK_IMAGE_VIEW_TYPE_2D;
-	imageViewCI.image = shadingRateImage.image;
-	imageViewCI.format = VK_FORMAT_R8_UINT;
-	imageViewCI.subresourceRange.baseMipLevel = 0;
-	imageViewCI.subresourceRange.levelCount = 1;
-	imageViewCI.subresourceRange.baseArrayLayer = 0;
-	imageViewCI.subresourceRange.layerCount = 1;
-	imageViewCI.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-	VK_CHECK_RESULT(vkCreateImageView(device, &imageViewCI, nullptr, &shadingRateImage.view));
+    VkMemoryAllocateInfo memAllloc{};
+    memAllloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    memAllloc.allocationSize = memReqs.size;
+    memAllloc.memoryTypeIndex = vulkanDevice->getMemoryType(memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    VK_CHECK_RESULT(vkAllocateMemory(device, &memAllloc, nullptr, &vrsShadingRateImage.memory));
+    VK_CHECK_RESULT(vkBindImageMemory(device, vrsShadingRateImage.image, vrsShadingRateImage.memory, 0));
 
-	// Populate with lowest possible shading rate pattern
-	uint8_t val = VK_SHADING_RATE_PALETTE_ENTRY_1_INVOCATION_PER_4X4_PIXELS_NV;
-	uint8_t* shadingRatePatternData = new uint8_t[bufferSize];
-	memset(shadingRatePatternData, val, bufferSize);
+    VkImageViewCreateInfo imageViewCI{};
+    imageViewCI.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    imageViewCI.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    imageViewCI.image = vrsShadingRateImage.image;
+    imageViewCI.format = VK_FORMAT_R8_UINT;
+    imageViewCI.subresourceRange.baseMipLevel = 0;
+    imageViewCI.subresourceRange.levelCount = 1;
+    imageViewCI.subresourceRange.baseArrayLayer = 0;
+    imageViewCI.subresourceRange.layerCount = 1;
+    imageViewCI.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    VK_CHECK_RESULT(vkCreateImageView(device, &imageViewCI, nullptr, &vrsShadingRateImage.view));
 
-	// Create a circular pattern with decreasing sampling rates outwards (max. range, pattern)
-	std::map<float, VkShadingRatePaletteEntryNV> patternLookup = {
-		{ 8.0f, VK_SHADING_RATE_PALETTE_ENTRY_1_INVOCATION_PER_PIXEL_NV },
-		{ 12.0f, VK_SHADING_RATE_PALETTE_ENTRY_1_INVOCATION_PER_2X1_PIXELS_NV },
-		{ 16.0f, VK_SHADING_RATE_PALETTE_ENTRY_1_INVOCATION_PER_1X2_PIXELS_NV },
-		{ 18.0f, VK_SHADING_RATE_PALETTE_ENTRY_1_INVOCATION_PER_2X2_PIXELS_NV },
-		{ 20.0f, VK_SHADING_RATE_PALETTE_ENTRY_1_INVOCATION_PER_4X2_PIXELS_NV },
-		{ 24.0f, VK_SHADING_RATE_PALETTE_ENTRY_1_INVOCATION_PER_2X4_PIXELS_NV }
-	};
+    // Populate with lowest possible shading rate pattern
+    uint8_t val = VK_SHADING_RATE_PALETTE_ENTRY_1_INVOCATION_PER_4X4_PIXELS_NV;
+    uint8_t* shadingRatePatternData = new uint8_t[bufferSize];
+    memset(shadingRatePatternData, val, bufferSize);
 
-	uint8_t* ptrData = shadingRatePatternData;
-	for (uint32_t y = 0; y < imageExtent.height; y++) {
-		for (uint32_t x = 0; x < imageExtent.width; x++) {
-			const float deltaX = (float)imageExtent.width / 2.0f - (float)x;
-			const float deltaY = ((float)imageExtent.height / 2.0f - (float)y) * ((float)width / (float)height);
-			const float dist = std::sqrt(deltaX * deltaX + deltaY * deltaY);
-			for (auto pattern : patternLookup) {
-				if (dist < pattern.first) {
-					*ptrData = pattern.second;
-					break;
-				}
-			}
-			ptrData++;
-		}
-	}
+    // Create a circular pattern with decreasing sampling rates outwards (max. range, pattern)
+    std::map<float, VkShadingRatePaletteEntryNV> patternLookup = {
+        { 8.0f, VK_SHADING_RATE_PALETTE_ENTRY_1_INVOCATION_PER_PIXEL_NV },
+        { 12.0f, VK_SHADING_RATE_PALETTE_ENTRY_1_INVOCATION_PER_2X1_PIXELS_NV },
+        { 16.0f, VK_SHADING_RATE_PALETTE_ENTRY_1_INVOCATION_PER_1X2_PIXELS_NV },
+        { 18.0f, VK_SHADING_RATE_PALETTE_ENTRY_1_INVOCATION_PER_2X2_PIXELS_NV },
+        { 20.0f, VK_SHADING_RATE_PALETTE_ENTRY_1_INVOCATION_PER_4X2_PIXELS_NV },
+        { 24.0f, VK_SHADING_RATE_PALETTE_ENTRY_1_INVOCATION_PER_2X4_PIXELS_NV }
+    };
 
-	VkBuffer stagingBuffer;
-	VkDeviceMemory stagingMemory;
+    uint8_t* ptrData = shadingRatePatternData;
+    for (uint32_t y = 0; y < imageExtent.height; y++) {
+        for (uint32_t x = 0; x < imageExtent.width; x++) {
+            const float deltaX = (float)imageExtent.width / 2.0f - (float)x;
+            const float deltaY = ((float)imageExtent.height / 2.0f - (float)y) * ((float)width / (float)height);
+            const float dist = std::sqrt(deltaX * deltaX + deltaY * deltaY);
+            for (auto pattern : patternLookup) {
+                if (dist < pattern.first) {
+                    *ptrData = pattern.second;
+                    break;
+                }
+            }
+            ptrData++;
+        }
+    }
 
-	VkBufferCreateInfo bufferCreateInfo{};
-	bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-	bufferCreateInfo.size = bufferSize;
-	bufferCreateInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-	bufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-	VK_CHECK_RESULT(vkCreateBuffer(device, &bufferCreateInfo, nullptr, &stagingBuffer));
-	VkMemoryAllocateInfo memAllocInfo{};
-	memAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-	memReqs = {};
-	vkGetBufferMemoryRequirements(device, stagingBuffer, &memReqs);
-	memAllocInfo.allocationSize = memReqs.size;
-	memAllocInfo.memoryTypeIndex = vulkanDevice->getMemoryType(memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-	VK_CHECK_RESULT(vkAllocateMemory(device, &memAllocInfo, nullptr, &stagingMemory));
-	VK_CHECK_RESULT(vkBindBufferMemory(device, stagingBuffer, stagingMemory, 0));
+    VkBuffer stagingBuffer;
+    VkDeviceMemory stagingMemory;
 
-	uint8_t* mapped;
-	VK_CHECK_RESULT(vkMapMemory(device, stagingMemory, 0, memReqs.size, 0, (void**)&mapped));
-	memcpy(mapped, shadingRatePatternData, bufferSize);
-	vkUnmapMemory(device, stagingMemory);
+    VkBufferCreateInfo bufferCreateInfo{};
+    bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferCreateInfo.size = bufferSize;
+    bufferCreateInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    bufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    VK_CHECK_RESULT(vkCreateBuffer(device, &bufferCreateInfo, nullptr, &stagingBuffer));
+    VkMemoryAllocateInfo memAllocInfo{};
+    memAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    memReqs = {};
+    vkGetBufferMemoryRequirements(device, stagingBuffer, &memReqs);
+    memAllocInfo.allocationSize = memReqs.size;
+    memAllocInfo.memoryTypeIndex = vulkanDevice->getMemoryType(memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    VK_CHECK_RESULT(vkAllocateMemory(device, &memAllocInfo, nullptr, &stagingMemory));
+    VK_CHECK_RESULT(vkBindBufferMemory(device, stagingBuffer, stagingMemory, 0));
 
-	delete[] shadingRatePatternData;
+    uint8_t* mapped;
+    VK_CHECK_RESULT(vkMapMemory(device, stagingMemory, 0, memReqs.size, 0, (void**)&mapped));
+    memcpy(mapped, shadingRatePatternData, bufferSize);
+    vkUnmapMemory(device, stagingMemory);
 
-	// Upload
-	VkCommandBuffer copyCmd = vulkanDevice->createCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, true);
-	VkImageSubresourceRange subresourceRange = {};
-	subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-	subresourceRange.levelCount = 1;
-	subresourceRange.layerCount = 1;
-	{
-		VkImageMemoryBarrier imageMemoryBarrier{};
-		imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-		imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-		imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-		imageMemoryBarrier.srcAccessMask = 0;
-		imageMemoryBarrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-		imageMemoryBarrier.image = shadingRateImage.image;
-		imageMemoryBarrier.subresourceRange = subresourceRange;
-		vkCmdPipelineBarrier(copyCmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &imageMemoryBarrier);
-	}
-	VkBufferImageCopy bufferCopyRegion{};
-	bufferCopyRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-	bufferCopyRegion.imageSubresource.layerCount = 1;
-	bufferCopyRegion.imageExtent.width = imageExtent.width;
-	bufferCopyRegion.imageExtent.height = imageExtent.height;
-	bufferCopyRegion.imageExtent.depth = 1;
-	vkCmdCopyBufferToImage(copyCmd, stagingBuffer, shadingRateImage.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &bufferCopyRegion);
-	{
-		VkImageMemoryBarrier imageMemoryBarrier{};
-		imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-		imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-		imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_SHADING_RATE_OPTIMAL_NV;
-		imageMemoryBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-		imageMemoryBarrier.dstAccessMask = 0;
-		imageMemoryBarrier.image = shadingRateImage.image;
-		imageMemoryBarrier.subresourceRange = subresourceRange;
-		vkCmdPipelineBarrier(copyCmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, nullptr, 0, nullptr, 1, &imageMemoryBarrier);
-	}
-	vulkanDevice->flushCommandBuffer(copyCmd, queue, true);
+    delete[] shadingRatePatternData;
 
-	vkFreeMemory(device, stagingMemory, nullptr);
-	vkDestroyBuffer(device, stagingBuffer, nullptr);
+    // Upload
+    VkCommandBuffer copyCmd = vulkanDevice->createCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, true);
+    VkImageSubresourceRange subresourceRange = {};
+    subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    subresourceRange.levelCount = 1;
+    subresourceRange.layerCount = 1;
+    {
+        VkImageMemoryBarrier imageMemoryBarrier{};
+        imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        imageMemoryBarrier.srcAccessMask = 0;
+        imageMemoryBarrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        imageMemoryBarrier.image = vrsShadingRateImage.image;
+        imageMemoryBarrier.subresourceRange = subresourceRange;
+        vkCmdPipelineBarrier(copyCmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &imageMemoryBarrier);
+    }
+    VkBufferImageCopy bufferCopyRegion{};
+    bufferCopyRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    bufferCopyRegion.imageSubresource.layerCount = 1;
+    bufferCopyRegion.imageExtent.width = imageExtent.width;
+    bufferCopyRegion.imageExtent.height = imageExtent.height;
+    bufferCopyRegion.imageExtent.depth = 1;
+    vkCmdCopyBufferToImage(copyCmd, stagingBuffer, vrsShadingRateImage.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &bufferCopyRegion);
+    {
+        VkImageMemoryBarrier imageMemoryBarrier{};
+        imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_SHADING_RATE_OPTIMAL_NV;
+        imageMemoryBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        imageMemoryBarrier.dstAccessMask = 0;
+        imageMemoryBarrier.image = vrsShadingRateImage.image;
+        imageMemoryBarrier.subresourceRange = subresourceRange;
+        vkCmdPipelineBarrier(copyCmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, nullptr, 0, nullptr, 1, &imageMemoryBarrier);
+    }
+    vulkanDevice->flushCommandBuffer(copyCmd, queue, true);
+
+    vkFreeMemory(device, stagingMemory, nullptr);
+    vkDestroyBuffer(device, stagingBuffer, nullptr);
+
+    vrsShadingRateImage.width = imageExtent.width;
+    vrsShadingRateImage.height = imageExtent.height;
+
+
+    VkSamplerCreateInfo sampler = vks::initializers::samplerCreateInfo();
+    sampler.magFilter = VK_FILTER_LINEAR;
+    sampler.minFilter = VK_FILTER_LINEAR;
+    sampler.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    sampler.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+    sampler.addressModeV = sampler.addressModeU;
+    sampler.addressModeW = sampler.addressModeU;
+    sampler.mipLodBias = 0.0f;
+    sampler.maxAnisotropy = 1.0f;
+    sampler.compareOp = VK_COMPARE_OP_NEVER;
+    sampler.minLod = 0.0f;
+    sampler.maxLod = 0.0f;
+    sampler.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
+    VK_CHECK_RESULT(vkCreateSampler(device, &sampler, nullptr, &vrsShadingRateImage.descriptor.sampler));
+    vrsShadingRateImage.descriptor.imageView = vrsShadingRateImage.view;
+    vrsShadingRateImage.descriptor.imageLayout = VK_IMAGE_LAYOUT_SHADING_RATE_OPTIMAL_NV;
+    //VkCommandBuffer layoutCmd = vulkanDevice->createCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, true);
+    //vks::tools::setImageLayout(
+    //    layoutCmd,
+    //    shadingRateImage.image,
+    //    VK_IMAGE_ASPECT_COLOR_BIT,
+    //    VK_IMAGE_LAYOUT_UNDEFINED,
+    //    shadingRateImage.descriptor.imageLayout);
+}
+
+void VulkanExample::prepareColorAttachmentImage()
+{
+    // Get device properties for the requested texture format
+    VkFormatProperties formatProperties;
+    vkGetPhysicalDeviceFormatProperties(physicalDevice, swapChain.colorFormat, &formatProperties);
+    // Check if requested image format supports image storage operations
+    assert(formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT);
+
+    // Prepare blit target texture
+    vrsColorAttachment.width = width;
+    vrsColorAttachment.height = height;
+
+    VkImageCreateInfo imageCreateInfo = vks::initializers::imageCreateInfo();
+    imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
+    imageCreateInfo.format = swapChain.colorFormat;
+    imageCreateInfo.extent = { width, height, 1 };
+    imageCreateInfo.mipLevels = 1;
+    imageCreateInfo.arrayLayers = 1;
+    imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+    imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    // Image will be sampled in the fragment shader and used as storage target in the compute shader
+    imageCreateInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
+    imageCreateInfo.flags = 0;
+
+    VkMemoryAllocateInfo memAllocInfo = vks::initializers::memoryAllocateInfo();
+    VkMemoryRequirements memReqs;
+
+    VK_CHECK_RESULT(vkCreateImage(device, &imageCreateInfo, nullptr, &vrsColorAttachment.image));
+    vkGetImageMemoryRequirements(device, vrsColorAttachment.image, &memReqs);
+    memAllocInfo.allocationSize = memReqs.size;
+    memAllocInfo.memoryTypeIndex = vulkanDevice->getMemoryType(memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    VK_CHECK_RESULT(vkAllocateMemory(device, &memAllocInfo, nullptr, &vrsColorAttachment.deviceMemory));
+    VK_CHECK_RESULT(vkBindImageMemory(device, vrsColorAttachment.image, vrsColorAttachment.deviceMemory, 0));
+
+    VkCommandBuffer layoutCmd = vulkanDevice->createCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, true);
+
+    vrsColorAttachment.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+    vks::tools::setImageLayout(
+        layoutCmd,
+        vrsColorAttachment.image,
+        VK_IMAGE_ASPECT_COLOR_BIT,
+        VK_IMAGE_LAYOUT_UNDEFINED,
+        vrsColorAttachment.imageLayout);
+
+    vulkanDevice->flushCommandBuffer(layoutCmd, queue, true);
+
+    // Create sampler
+    VkSamplerCreateInfo sampler = vks::initializers::samplerCreateInfo();
+    sampler.magFilter = VK_FILTER_LINEAR;
+    sampler.minFilter = VK_FILTER_LINEAR;
+    sampler.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    sampler.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+    sampler.addressModeV = sampler.addressModeU;
+    sampler.addressModeW = sampler.addressModeU;
+    sampler.mipLodBias = 0.0f;
+    sampler.maxAnisotropy = 1.0f;
+    sampler.compareOp = VK_COMPARE_OP_NEVER;
+    sampler.minLod = 0.0f;
+    sampler.maxLod = 0.0f;
+    sampler.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
+    VK_CHECK_RESULT(vkCreateSampler(device, &sampler, nullptr, &vrsColorAttachment.sampler));
+
+    // Create image view
+    VkImageViewCreateInfo view = vks::initializers::imageViewCreateInfo();
+    view.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    view.format = swapChain.colorFormat;
+    view.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+    view.image = vrsColorAttachment.image;
+    VK_CHECK_RESULT(vkCreateImageView(device, &view, nullptr, &vrsColorAttachment.view));
+
+    // Initialize a descriptor for later use
+    vrsColorAttachment.descriptor.imageLayout = vrsColorAttachment.imageLayout;
+    vrsColorAttachment.descriptor.imageView = vrsColorAttachment.view;
+    vrsColorAttachment.descriptor.sampler = vrsColorAttachment.sampler;
+    vrsColorAttachment.device = vulkanDevice;
+}
+
+void VulkanExample::copyColorAttachment(VkCommandBuffer& commandBuffer, VkImage& colorAttachment)
+{
+    VkImageSubresourceRange subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+
+    // Prepare current swap chain image as transfer destination
+    vks::tools::setImageLayout(
+        commandBuffer,
+        vrsColorAttachment.image,
+        VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        subresourceRange);
+
+    // Prepare ray tracing output image as transfer source
+    vks::tools::setImageLayout(
+        commandBuffer,
+        colorAttachment,
+        VK_IMAGE_LAYOUT_GENERAL,
+        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        subresourceRange);
+
+    VkImageCopy copyRegion{};
+    copyRegion.srcSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
+    copyRegion.srcOffset = { 0, 0, 0 };
+    copyRegion.dstSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
+    copyRegion.dstOffset = { 0, 0, 0 };
+    copyRegion.extent = { width, height, 1 };
+    vkCmdCopyImage(commandBuffer, colorAttachment, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, vrsColorAttachment.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
+
+    // Transition swap chain image back for presentation
+    vks::tools::setImageLayout(
+        commandBuffer,
+        colorAttachment,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+        subresourceRange);
+
+    // Transition ray tracing output image back to general layout
+    vks::tools::setImageLayout(
+        commandBuffer,
+        vrsColorAttachment.image,
+        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        VK_IMAGE_LAYOUT_GENERAL,
+        subresourceRange);
+
+    //VkImageCopy copyRegion{};
+    //copyRegion.srcSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
+    //copyRegion.srcOffset = { 0, 0, 0 };
+    //copyRegion.dstSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
+    //copyRegion.dstOffset = { 0, 0, 0 };
+    //copyRegion.extent = { width, height, 1 };
+    //vkCmdCopyImage(
+    //    commandBuffer,
+    //    colorAttachment,
+    //    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+    //    vrsColorAttachment.image,
+    //    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+    //    1,
+    //    &copyRegion);
+}
+
+void VulkanExample::buildComputeCommandBuffer()
+{
+    VkCommandBufferAllocateInfo cmdBufAllocateInfo =
+        vks::initializers::commandBufferAllocateInfo(
+            vrsCompute.commandPool,
+            VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+            1);
+
+    VK_CHECK_RESULT(vkAllocateCommandBuffers(device, &cmdBufAllocateInfo, &vrsCompute.commandBuffer));
+
+    VkCommandBufferBeginInfo cmdBufInfo = vks::initializers::commandBufferBeginInfo();
+
+    VK_CHECK_RESULT(vkBeginCommandBuffer(vrsCompute.commandBuffer, &cmdBufInfo));
+
+    vkCmdBindPipeline(vrsCompute.commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, vrsCompute.pipeline);
+    vkCmdBindDescriptorSets(vrsCompute.commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, vrsCompute.pipelineLayout, 0, 1, &vrsCompute.descriptorSet, 0, 0);
+
+    vkCmdDispatch(vrsCompute.commandBuffer, vrsShadingRateImage.width, vrsShadingRateImage.height, 1);
+
+    vkEndCommandBuffer(vrsCompute.commandBuffer);
+}
+
+void VulkanExample::prepareCompute()
+{
+    VkDeviceQueueCreateInfo queueCreateInfo = {};
+    queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+    queueCreateInfo.pNext = NULL;
+    queueCreateInfo.queueFamilyIndex = vulkanDevice->queueFamilyIndices.compute;
+    queueCreateInfo.queueCount = 1;
+    vkGetDeviceQueue(device, vulkanDevice->queueFamilyIndices.compute, 0, &vrsCompute.queue);
+
+    std::vector<VkDescriptorSetLayoutBinding> setLayoutBindings = {
+        // Binding 0: vrs image
+        vks::initializers::descriptorSetLayoutBinding(
+            VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+            VK_SHADER_STAGE_COMPUTE_BIT,
+            0),
+        // Binding 1: color image of last frame
+        vks::initializers::descriptorSetLayoutBinding(
+            VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+            VK_SHADER_STAGE_COMPUTE_BIT,
+            1)
+    };
+
+    VkDescriptorSetLayoutCreateInfo descriptorLayout =
+        vks::initializers::descriptorSetLayoutCreateInfo(
+            setLayoutBindings.data(),
+            setLayoutBindings.size());
+
+    VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &descriptorLayout, nullptr, &vrsCompute.descriptorSetLayout));
+
+    VkPipelineLayoutCreateInfo pPipelineLayoutCreateInfo =
+        vks::initializers::pipelineLayoutCreateInfo(
+            &vrsCompute.descriptorSetLayout,
+            1);
+
+    VK_CHECK_RESULT(vkCreatePipelineLayout(device, &pPipelineLayoutCreateInfo, nullptr, &vrsCompute.pipelineLayout));
+
+    VkDescriptorSetAllocateInfo allocInfo =
+        vks::initializers::descriptorSetAllocateInfo(
+            descriptorPool,
+            &vrsCompute.descriptorSetLayout,
+            1);
+
+    VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, &vrsCompute.descriptorSet));
+
+    std::vector<VkWriteDescriptorSet> computeWriteDescriptorSets =
+    {
+        // Binding 0: vrs image
+        vks::initializers::writeDescriptorSet(
+            vrsCompute.descriptorSet,
+            VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+            0,
+            &vrsShadingRateImage.descriptor),
+        // Binding 1: color image of last frame
+        vks::initializers::writeDescriptorSet(
+            vrsCompute.descriptorSet,
+            VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+            1,
+            &vrsColorAttachment.descriptor)
+    };
+
+    vkUpdateDescriptorSets(device, computeWriteDescriptorSets.size(), computeWriteDescriptorSets.data(), 0, NULL);
+
+    VkComputePipelineCreateInfo computePipelineCreateInfo =
+        vks::initializers::computePipelineCreateInfo(vrsCompute.pipelineLayout, 0);
+
+    computePipelineCreateInfo.stage = loadShader(getHomeworkShadersPath() + "homework2/vrs.comp.spv", VK_SHADER_STAGE_COMPUTE_BIT);
+    VK_CHECK_RESULT(vkCreateComputePipelines(device, pipelineCache, 1, &computePipelineCreateInfo, nullptr, &vrsCompute.pipeline));
+
+    // Separate command pool as queue family for compute may be different than graphics
+    VkCommandPoolCreateInfo cmdPoolInfo = {};
+    cmdPoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    cmdPoolInfo.queueFamilyIndex = vulkanDevice->queueFamilyIndices.compute;
+    cmdPoolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+    VK_CHECK_RESULT(vkCreateCommandPool(device, &cmdPoolInfo, nullptr, &vrsCompute.commandPool));
+
+    // Fence for compute CB sync
+    VkFenceCreateInfo fenceCreateInfo = vks::initializers::fenceCreateInfo(VK_FENCE_CREATE_SIGNALED_BIT);
+    VK_CHECK_RESULT(vkCreateFence(device, &fenceCreateInfo, nullptr, &vrsCompute.fence));
+
+    // Build a single command buffer containing the compute dispatch commands
+    buildComputeCommandBuffer();
+}
+
+void VulkanExample::draw()
+{
+    // Submit compute commands
+    // Use a fence to ensure that compute command buffer has finished executing before using it again
+    vkWaitForFences(device, 1, &vrsCompute.fence, VK_TRUE, UINT64_MAX);
+    vkResetFences(device, 1, &vrsCompute.fence);
+
+    VkSubmitInfo computeSubmitInfo = vks::initializers::submitInfo();
+    computeSubmitInfo.commandBufferCount = 1;
+    computeSubmitInfo.pCommandBuffers = &vrsCompute.commandBuffer;
+
+    VK_CHECK_RESULT(vkQueueSubmit(vrsCompute.queue, 1, &computeSubmitInfo, vrsCompute.fence));
+
+    VulkanExampleBase::prepareFrame();
+
+    // Command buffer to be submitted to the queue
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &drawCmdBuffers[currentBuffer];
+    VK_CHECK_RESULT(vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE));
+
+    VulkanExampleBase::submitFrame();
 }
 
 void VulkanExample::preparePipelines()
 {
-	VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCI = vks::initializers::pipelineInputAssemblyStateCreateInfo(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, 0, VK_FALSE);
-	VkPipelineRasterizationStateCreateInfo rasterizationStateCI = vks::initializers::pipelineRasterizationStateCreateInfo(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_COUNTER_CLOCKWISE, 0);
-	VkPipelineColorBlendAttachmentState blendAttachmentStateCI = vks::initializers::pipelineColorBlendAttachmentState(0xf, VK_FALSE);
-	VkPipelineColorBlendStateCreateInfo colorBlendStateCI = vks::initializers::pipelineColorBlendStateCreateInfo(1, &blendAttachmentStateCI);
-	VkPipelineDepthStencilStateCreateInfo depthStencilStateCI = vks::initializers::pipelineDepthStencilStateCreateInfo(VK_TRUE, VK_TRUE, VK_COMPARE_OP_LESS_OR_EQUAL);
-	VkPipelineViewportStateCreateInfo viewportStateCI = vks::initializers::pipelineViewportStateCreateInfo(1, 1, 0);
-	VkPipelineMultisampleStateCreateInfo multisampleStateCI = vks::initializers::pipelineMultisampleStateCreateInfo(VK_SAMPLE_COUNT_1_BIT, 0);
-	const std::vector<VkDynamicState> dynamicStateEnables = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
-	VkPipelineDynamicStateCreateInfo dynamicStateCI = vks::initializers::pipelineDynamicStateCreateInfo(dynamicStateEnables.data(), static_cast<uint32_t>(dynamicStateEnables.size()), 0);
-	std::array<VkPipelineShaderStageCreateInfo, 2> shaderStages;
+    VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCI = vks::initializers::pipelineInputAssemblyStateCreateInfo(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, 0, VK_FALSE);
+    VkPipelineRasterizationStateCreateInfo rasterizationStateCI = vks::initializers::pipelineRasterizationStateCreateInfo(VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_COUNTER_CLOCKWISE, 0);
+    VkPipelineColorBlendAttachmentState blendAttachmentStateCI = vks::initializers::pipelineColorBlendAttachmentState(0xf, VK_FALSE);
+    VkPipelineColorBlendStateCreateInfo colorBlendStateCI = vks::initializers::pipelineColorBlendStateCreateInfo(1, &blendAttachmentStateCI);
+    VkPipelineDepthStencilStateCreateInfo depthStencilStateCI = vks::initializers::pipelineDepthStencilStateCreateInfo(VK_TRUE, VK_TRUE, VK_COMPARE_OP_LESS_OR_EQUAL);
+    VkPipelineViewportStateCreateInfo viewportStateCI = vks::initializers::pipelineViewportStateCreateInfo(1, 1, 0);
+    VkPipelineMultisampleStateCreateInfo multisampleStateCI = vks::initializers::pipelineMultisampleStateCreateInfo(VK_SAMPLE_COUNT_1_BIT, 0);
+    const std::vector<VkDynamicState> dynamicStateEnables = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+    VkPipelineDynamicStateCreateInfo dynamicStateCI = vks::initializers::pipelineDynamicStateCreateInfo(dynamicStateEnables.data(), static_cast<uint32_t>(dynamicStateEnables.size()), 0);
+    std::array<VkPipelineShaderStageCreateInfo, 2> shaderStages;
 
-	VkGraphicsPipelineCreateInfo pipelineCI = vks::initializers::pipelineCreateInfo(pipelineLayout, renderPass, 0);
-	pipelineCI.pInputAssemblyState = &inputAssemblyStateCI;
-	pipelineCI.pRasterizationState = &rasterizationStateCI;
-	pipelineCI.pColorBlendState = &colorBlendStateCI;
-	pipelineCI.pMultisampleState = &multisampleStateCI;
-	pipelineCI.pViewportState = &viewportStateCI;
-	pipelineCI.pDepthStencilState = &depthStencilStateCI;
-	pipelineCI.pDynamicState = &dynamicStateCI;
-	pipelineCI.stageCount = static_cast<uint32_t>(shaderStages.size());
-	pipelineCI.pStages = shaderStages.data();
-	pipelineCI.pVertexInputState = vkglTF::Vertex::getPipelineVertexInputState({ vkglTF::VertexComponent::Position, vkglTF::VertexComponent::Normal, vkglTF::VertexComponent::UV, vkglTF::VertexComponent::Color, vkglTF::VertexComponent::Tangent });
+    VkGraphicsPipelineCreateInfo pipelineCI = vks::initializers::pipelineCreateInfo(pipelineLayout, renderPass, 0);
+    pipelineCI.pInputAssemblyState = &inputAssemblyStateCI;
+    pipelineCI.pRasterizationState = &rasterizationStateCI;
+    pipelineCI.pColorBlendState = &colorBlendStateCI;
+    pipelineCI.pMultisampleState = &multisampleStateCI;
+    pipelineCI.pViewportState = &viewportStateCI;
+    pipelineCI.pDepthStencilState = &depthStencilStateCI;
+    pipelineCI.pDynamicState = &dynamicStateCI;
+    pipelineCI.stageCount = static_cast<uint32_t>(shaderStages.size());
+    pipelineCI.pStages = shaderStages.data();
+    pipelineCI.pVertexInputState = vkglTF::Vertex::getPipelineVertexInputState({ vkglTF::VertexComponent::Position, vkglTF::VertexComponent::Normal, vkglTF::VertexComponent::UV, vkglTF::VertexComponent::Color, vkglTF::VertexComponent::Tangent });
 
     shaderStages[0] = loadShader(getHomeworkShadersPath() + "homework2/scene.vert.spv", VK_SHADER_STAGE_VERTEX_BIT);
-	shaderStages[1] = loadShader(getHomeworkShadersPath() + "homework2/scene.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
+    shaderStages[1] = loadShader(getHomeworkShadersPath() + "homework2/scene.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
 
-	// Properties for alpha masked materials will be passed via specialization constants
-	struct SpecializationData {
-		VkBool32 alphaMask;
-		float alphaMaskCutoff;
-	} specializationData;
-	specializationData.alphaMask = false;
-	specializationData.alphaMaskCutoff = 0.5f;
-	const std::vector<VkSpecializationMapEntry> specializationMapEntries = {
-		vks::initializers::specializationMapEntry(0, offsetof(SpecializationData, alphaMask), sizeof(SpecializationData::alphaMask)),
-		vks::initializers::specializationMapEntry(1, offsetof(SpecializationData, alphaMaskCutoff), sizeof(SpecializationData::alphaMaskCutoff)),
-	};
-	VkSpecializationInfo specializationInfo = vks::initializers::specializationInfo(specializationMapEntries, sizeof(specializationData), &specializationData);
-	shaderStages[1].pSpecializationInfo = &specializationInfo;
+    // Properties for alpha masked materials will be passed via specialization constants
+    struct SpecializationData {
+        VkBool32 alphaMask;
+        float alphaMaskCutoff;
+    } specializationData;
+    specializationData.alphaMask = false;
+    specializationData.alphaMaskCutoff = 0.5f;
+    const std::vector<VkSpecializationMapEntry> specializationMapEntries = {
+        vks::initializers::specializationMapEntry(0, offsetof(SpecializationData, alphaMask), sizeof(SpecializationData::alphaMask)),
+        vks::initializers::specializationMapEntry(1, offsetof(SpecializationData, alphaMaskCutoff), sizeof(SpecializationData::alphaMaskCutoff)),
+    };
+    VkSpecializationInfo specializationInfo = vks::initializers::specializationInfo(specializationMapEntries, sizeof(specializationData), &specializationData);
+    shaderStages[1].pSpecializationInfo = &specializationInfo;
 
-	// Create pipeline without shading rate 
-	VK_CHECK_RESULT(vkCreateGraphicsPipelines(device, pipelineCache, 1, &pipelineCI, nullptr, &basePipelines.opaque));
-	specializationData.alphaMask = true;
-	rasterizationStateCI.cullMode = VK_CULL_MODE_NONE;
-	VK_CHECK_RESULT(vkCreateGraphicsPipelines(device, pipelineCache, 1, &pipelineCI, nullptr, &basePipelines.masked));
-	rasterizationStateCI.cullMode = VK_CULL_MODE_BACK_BIT;
-	specializationData.alphaMask = false;
+    // Create pipeline without shading rate 
+    VK_CHECK_RESULT(vkCreateGraphicsPipelines(device, pipelineCache, 1, &pipelineCI, nullptr, &basePipelines.opaque));
+    specializationData.alphaMask = true;
+    rasterizationStateCI.cullMode = VK_CULL_MODE_NONE;
+    VK_CHECK_RESULT(vkCreateGraphicsPipelines(device, pipelineCache, 1, &pipelineCI, nullptr, &basePipelines.masked));
+    rasterizationStateCI.cullMode = VK_CULL_MODE_BACK_BIT;
+    specializationData.alphaMask = false;
 
-	// Create pipeline with shading rate enabled
-	// [POI] Possible per-Viewport shading rate palette entries
-	const std::vector<VkShadingRatePaletteEntryNV> shadingRatePaletteEntries = {
-		VK_SHADING_RATE_PALETTE_ENTRY_NO_INVOCATIONS_NV,
-		VK_SHADING_RATE_PALETTE_ENTRY_16_INVOCATIONS_PER_PIXEL_NV,
-		VK_SHADING_RATE_PALETTE_ENTRY_8_INVOCATIONS_PER_PIXEL_NV,
-		VK_SHADING_RATE_PALETTE_ENTRY_4_INVOCATIONS_PER_PIXEL_NV,
-		VK_SHADING_RATE_PALETTE_ENTRY_2_INVOCATIONS_PER_PIXEL_NV,
-		VK_SHADING_RATE_PALETTE_ENTRY_1_INVOCATION_PER_PIXEL_NV,
-		VK_SHADING_RATE_PALETTE_ENTRY_1_INVOCATION_PER_2X1_PIXELS_NV,
-		VK_SHADING_RATE_PALETTE_ENTRY_1_INVOCATION_PER_1X2_PIXELS_NV,
-		VK_SHADING_RATE_PALETTE_ENTRY_1_INVOCATION_PER_2X2_PIXELS_NV,
-		VK_SHADING_RATE_PALETTE_ENTRY_1_INVOCATION_PER_4X2_PIXELS_NV,
-		VK_SHADING_RATE_PALETTE_ENTRY_1_INVOCATION_PER_2X4_PIXELS_NV,
-		VK_SHADING_RATE_PALETTE_ENTRY_1_INVOCATION_PER_4X4_PIXELS_NV,
-	};
-	VkShadingRatePaletteNV shadingRatePalette{};
-	shadingRatePalette.shadingRatePaletteEntryCount = static_cast<uint32_t>(shadingRatePaletteEntries.size());
-	shadingRatePalette.pShadingRatePaletteEntries = shadingRatePaletteEntries.data();
-	VkPipelineViewportShadingRateImageStateCreateInfoNV pipelineViewportShadingRateImageStateCI{};
-	pipelineViewportShadingRateImageStateCI.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_SHADING_RATE_IMAGE_STATE_CREATE_INFO_NV;
-	pipelineViewportShadingRateImageStateCI.shadingRateImageEnable = VK_TRUE;
-	pipelineViewportShadingRateImageStateCI.viewportCount = 1;
-	pipelineViewportShadingRateImageStateCI.pShadingRatePalettes = &shadingRatePalette;
-	viewportStateCI.pNext = &pipelineViewportShadingRateImageStateCI;
-	VK_CHECK_RESULT(vkCreateGraphicsPipelines(device, pipelineCache, 1, &pipelineCI, nullptr, &shadingRatePipelines.opaque));
-	specializationData.alphaMask = true;
-	rasterizationStateCI.cullMode = VK_CULL_MODE_NONE;
-	VK_CHECK_RESULT(vkCreateGraphicsPipelines(device, pipelineCache, 1, &pipelineCI, nullptr, &shadingRatePipelines.masked));
+    // Create pipeline with shading rate enabled
+    // [POI] Possible per-Viewport shading rate palette entries
+    const std::vector<VkShadingRatePaletteEntryNV> shadingRatePaletteEntries = {
+        VK_SHADING_RATE_PALETTE_ENTRY_NO_INVOCATIONS_NV,
+        VK_SHADING_RATE_PALETTE_ENTRY_16_INVOCATIONS_PER_PIXEL_NV,
+        VK_SHADING_RATE_PALETTE_ENTRY_8_INVOCATIONS_PER_PIXEL_NV,
+        VK_SHADING_RATE_PALETTE_ENTRY_4_INVOCATIONS_PER_PIXEL_NV,
+        VK_SHADING_RATE_PALETTE_ENTRY_2_INVOCATIONS_PER_PIXEL_NV,
+        VK_SHADING_RATE_PALETTE_ENTRY_1_INVOCATION_PER_PIXEL_NV,
+        VK_SHADING_RATE_PALETTE_ENTRY_1_INVOCATION_PER_2X1_PIXELS_NV,
+        VK_SHADING_RATE_PALETTE_ENTRY_1_INVOCATION_PER_1X2_PIXELS_NV,
+        VK_SHADING_RATE_PALETTE_ENTRY_1_INVOCATION_PER_2X2_PIXELS_NV,
+        VK_SHADING_RATE_PALETTE_ENTRY_1_INVOCATION_PER_4X2_PIXELS_NV,
+        VK_SHADING_RATE_PALETTE_ENTRY_1_INVOCATION_PER_2X4_PIXELS_NV,
+        VK_SHADING_RATE_PALETTE_ENTRY_1_INVOCATION_PER_4X4_PIXELS_NV,
+    };
+    VkShadingRatePaletteNV shadingRatePalette{};
+    shadingRatePalette.shadingRatePaletteEntryCount = static_cast<uint32_t>(shadingRatePaletteEntries.size());
+    shadingRatePalette.pShadingRatePaletteEntries = shadingRatePaletteEntries.data();
+    VkPipelineViewportShadingRateImageStateCreateInfoNV pipelineViewportShadingRateImageStateCI{};
+    pipelineViewportShadingRateImageStateCI.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_SHADING_RATE_IMAGE_STATE_CREATE_INFO_NV;
+    pipelineViewportShadingRateImageStateCI.shadingRateImageEnable = VK_TRUE;
+    pipelineViewportShadingRateImageStateCI.viewportCount = 1;
+    pipelineViewportShadingRateImageStateCI.pShadingRatePalettes = &shadingRatePalette;
+    viewportStateCI.pNext = &pipelineViewportShadingRateImageStateCI;
+    VK_CHECK_RESULT(vkCreateGraphicsPipelines(device, pipelineCache, 1, &pipelineCI, nullptr, &shadingRatePipelines.opaque));
+    specializationData.alphaMask = true;
+    rasterizationStateCI.cullMode = VK_CULL_MODE_NONE;
+    VK_CHECK_RESULT(vkCreateGraphicsPipelines(device, pipelineCache, 1, &pipelineCI, nullptr, &shadingRatePipelines.masked));
 }
 
 void VulkanExample::prepareUniformBuffers()
 {
-	VK_CHECK_RESULT(vulkanDevice->createBuffer(
-		VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-		&shaderData.buffer,
-		sizeof(shaderData.values)));
-	VK_CHECK_RESULT(shaderData.buffer.map());
-	updateUniformBuffers();
+    VK_CHECK_RESULT(vulkanDevice->createBuffer(
+        VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        &shaderData.buffer,
+        sizeof(shaderData.values)));
+    VK_CHECK_RESULT(shaderData.buffer.map());
+    updateUniformBuffers();
 }
 
 void VulkanExample::updateUniformBuffers()
 {
-	shaderData.values.projection = camera.matrices.perspective;
-	shaderData.values.view = camera.matrices.view;
-	shaderData.values.viewPos = camera.viewPos;
-	shaderData.values.colorShadingRate = colorShadingRate;
-	memcpy(shaderData.buffer.mapped, &shaderData.values, sizeof(shaderData.values));
+    shaderData.values.projection = camera.matrices.perspective;
+    shaderData.values.view = camera.matrices.view;
+    shaderData.values.viewPos = camera.viewPos;
+    shaderData.values.colorShadingRate = colorShadingRate;
+    memcpy(shaderData.buffer.mapped, &shaderData.values, sizeof(shaderData.values));
 }
 
 void VulkanExample::prepare()
 {
-	VulkanExampleBase::prepare();
-	loadAssets();
-	
-	// [POI]
-	vkCmdBindShadingRateImageNV = reinterpret_cast<PFN_vkCmdBindShadingRateImageNV>(vkGetDeviceProcAddr(device, "vkCmdBindShadingRateImageNV"));
-	physicalDeviceShadingRateImagePropertiesNV.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADING_RATE_IMAGE_PROPERTIES_NV;
-	VkPhysicalDeviceProperties2 deviceProperties2{};
-	deviceProperties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
-	deviceProperties2.pNext = &physicalDeviceShadingRateImagePropertiesNV;
-	vkGetPhysicalDeviceProperties2(physicalDevice, &deviceProperties2);
+    VulkanExampleBase::prepare();
+    loadAssets();
 
-	prepareShadingRateImage();
-	prepareUniformBuffers();
-	setupDescriptors();
-	preparePipelines();
-	buildCommandBuffers();
-	prepared = true;
+    // [POI]
+    vkCmdBindShadingRateImageNV = reinterpret_cast<PFN_vkCmdBindShadingRateImageNV>(vkGetDeviceProcAddr(device, "vkCmdBindShadingRateImageNV"));
+    physicalDeviceShadingRateImagePropertiesNV.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADING_RATE_IMAGE_PROPERTIES_NV;
+    VkPhysicalDeviceProperties2 deviceProperties2{};
+    deviceProperties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+    deviceProperties2.pNext = &physicalDeviceShadingRateImagePropertiesNV;
+    vkGetPhysicalDeviceProperties2(physicalDevice, &deviceProperties2);
+
+    prepareShadingRateImage();
+    prepareColorAttachmentImage();
+    prepareUniformBuffers();
+    setupDescriptors();
+    preparePipelines();
+    buildCommandBuffers();
+    prepared = true;
+
+    prepareCompute();
 }
 
 void VulkanExample::render()
 {
-	renderFrame();
-	if (camera.updated) {
-		updateUniformBuffers();
-	}
+    draw();
+    //renderFrame();
+    if (camera.updated) {
+        updateUniformBuffers();
+    }
 }
 
 void VulkanExample::OnUpdateUIOverlay(vks::UIOverlay* overlay)
 {
-	if (overlay->checkBox("Enable shading rate", &enableShadingRate)) {
-		buildCommandBuffers();
-	}
-	if (overlay->checkBox("Color shading rates", &colorShadingRate)) {
-		updateUniformBuffers();
-	}
+    if (overlay->checkBox("Enable shading rate", &enableShadingRate)) {
+        buildCommandBuffers();
+    }
+    if (overlay->checkBox("Color shading rates", &colorShadingRate)) {
+        updateUniformBuffers();
+    }
 }
 
 VULKAN_EXAMPLE_MAIN()

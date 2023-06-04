@@ -14,58 +14,79 @@
 class VulkanExample : public VulkanExampleBase
 {
 public:
-	vkglTF::Model scene;
+    struct ShadingRateImage {
+        VkImage image;
+        VkDeviceMemory memory;
+        VkImageView view;
+        VkImageLayout         imageLayout;
+        uint32_t              width, height;
+        VkDescriptorImageInfo descriptor;
+        VkSampler             sampler;
+    } vrsShadingRateImage;
+    vks::Texture vrsColorAttachment;
+    struct VRSCompute {
+        VkQueue queue;
+        VkCommandPool commandPool;
+        VkCommandBuffer commandBuffer;
+        VkFence fence;
+        VkDescriptorSetLayout descriptorSetLayout;
+        VkDescriptorSet descriptorSet;
+        VkPipelineLayout pipelineLayout;
+        VkPipeline pipeline;
+        VkMemoryBarrier copyColorAttachmentMemoryBarrier;
+    } vrsCompute;
 
-	struct ShadingRateImage {
-		VkImage image;
-		VkDeviceMemory memory;
-		VkImageView view;
-	} shadingRateImage;
+    vkglTF::Model scene;
 
-	bool enableShadingRate = true;
-	bool colorShadingRate = false;
+    bool enableShadingRate = true;
+    bool colorShadingRate = false;
 
-	struct ShaderData {
-		vks::Buffer buffer;
-		struct Values {
-			glm::mat4 projection;
-			glm::mat4 view;
-			glm::mat4 model = glm::mat4(1.0f);
-			glm::vec4 lightPos = glm::vec4(0.0f, 2.5f, 0.0f, 1.0f);
-			glm::vec4 viewPos;
-			int32_t colorShadingRate;
-		} values;
-	} shaderData;
+    struct ShaderData {
+        vks::Buffer buffer;
+        struct Values {
+            glm::mat4 projection;
+            glm::mat4 view;
+            glm::mat4 model = glm::mat4(1.0f);
+            glm::vec4 lightPos = glm::vec4(0.0f, 2.5f, 0.0f, 1.0f);
+            glm::vec4 viewPos;
+            int32_t colorShadingRate;
+        } values;
+    } shaderData;
 
-	struct Pipelines {
-		VkPipeline opaque;
-		VkPipeline masked;
-	};
+    struct Pipelines {
+        VkPipeline opaque;
+        VkPipeline masked;
+    };
 
-	Pipelines basePipelines;
-	Pipelines shadingRatePipelines;
+    Pipelines basePipelines;
+    Pipelines shadingRatePipelines;
 
-	VkPipelineLayout pipelineLayout;
-	VkDescriptorSet descriptorSet;
-	VkDescriptorSetLayout descriptorSetLayout;
+    VkPipelineLayout pipelineLayout;
+    VkDescriptorSet descriptorSet;
+    VkDescriptorSetLayout descriptorSetLayout;
 
-	VkPhysicalDeviceShadingRateImagePropertiesNV physicalDeviceShadingRateImagePropertiesNV{};
-	VkPhysicalDeviceShadingRateImageFeaturesNV enabledPhysicalDeviceShadingRateImageFeaturesNV{};
-	PFN_vkCmdBindShadingRateImageNV vkCmdBindShadingRateImageNV;
+    VkPhysicalDeviceShadingRateImagePropertiesNV physicalDeviceShadingRateImagePropertiesNV{};
+    VkPhysicalDeviceShadingRateImageFeaturesNV enabledPhysicalDeviceShadingRateImageFeaturesNV{};
+    PFN_vkCmdBindShadingRateImageNV vkCmdBindShadingRateImageNV;
 
-	VulkanExample();
-	~VulkanExample();
-	virtual void getEnabledFeatures();
-	void handleResize();
-	void buildCommandBuffers();
-	void loadglTFFile(std::string filename);
-	void loadAssets();
-	void prepareShadingRateImage();
-	void setupDescriptors();
-	void preparePipelines();
-	void prepareUniformBuffers();
-	void updateUniformBuffers();
-	void prepare();
-	virtual void render();
-	virtual void OnUpdateUIOverlay(vks::UIOverlay* overlay);
+    VulkanExample();
+    ~VulkanExample();
+    virtual void getEnabledFeatures();
+    void handleResize();
+    void buildCommandBuffers();
+    void loadglTFFile(std::string filename);
+    void loadAssets();
+    void prepareShadingRateImage();
+    void prepareColorAttachmentImage();
+    void copyColorAttachment(VkCommandBuffer& commandBuffer, VkImage& colorAttachment);
+    void buildComputeCommandBuffer();
+    void prepareCompute();
+    void draw();
+    void setupDescriptors();
+    void preparePipelines();
+    void prepareUniformBuffers();
+    void updateUniformBuffers();
+    void prepare();
+    virtual void render();
+    virtual void OnUpdateUIOverlay(vks::UIOverlay* overlay);
 };
