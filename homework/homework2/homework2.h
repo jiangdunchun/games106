@@ -36,6 +36,8 @@ public:
         VkMemoryBarrier copyColorAttachmentMemoryBarrier;
     } vrsCompute;
 
+    bool isFirstTime = true;
+
     vkglTF::Model scene;
 
     bool enableShadingRate = true;

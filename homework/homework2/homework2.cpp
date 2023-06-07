@@ -114,10 +114,11 @@ void VulkanExample::buildCommandBuffers()
         vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.masked);
         scene.draw(drawCmdBuffers[i], vkglTF::RenderFlags::BindImages | vkglTF::RenderFlags::RenderAlphaMaskedNodes, pipelineLayout);
 
+        vkCmdEndRenderPass(drawCmdBuffers[i]);
         copyColorAttachment(drawCmdBuffers[i], swapChain.images[i]);
 
-        drawUI(drawCmdBuffers[i]);
-        vkCmdEndRenderPass(drawCmdBuffers[i]);
+        //drawUI(drawCmdBuffers[i]);
+        //vkCmdEndRenderPass(drawCmdBuffers[i]);
         VK_CHECK_RESULT(vkEndCommandBuffer(drawCmdBuffers[i]));
     }
 }
@@ -211,7 +212,8 @@ void VulkanExample::prepareShadingRateImage()
     VK_CHECK_RESULT(vkCreateImageView(device, &imageViewCI, nullptr, &vrsShadingRateImage.view));
 
     // Populate with lowest possible shading rate pattern
-    uint8_t val = VK_SHADING_RATE_PALETTE_ENTRY_1_INVOCATION_PER_4X4_PIXELS_NV;
+    //uint8_t val = VK_SHADING_RATE_PALETTE_ENTRY_1_INVOCATION_PER_4X4_PIXELS_NV;
+    uint8_t val = VK_SHADING_RATE_PALETTE_ENTRY_1_INVOCATION_PER_PIXEL_NV;
     uint8_t* shadingRatePatternData = new uint8_t[bufferSize];
     memset(shadingRatePatternData, val, bufferSize);
 
@@ -225,21 +227,21 @@ void VulkanExample::prepareShadingRateImage()
         { 24.0f, VK_SHADING_RATE_PALETTE_ENTRY_1_INVOCATION_PER_2X4_PIXELS_NV }
     };
 
-    uint8_t* ptrData = shadingRatePatternData;
-    for (uint32_t y = 0; y < imageExtent.height; y++) {
-        for (uint32_t x = 0; x < imageExtent.width; x++) {
-            const float deltaX = (float)imageExtent.width / 2.0f - (float)x;
-            const float deltaY = ((float)imageExtent.height / 2.0f - (float)y) * ((float)width / (float)height);
-            const float dist = std::sqrt(deltaX * deltaX + deltaY * deltaY);
-            for (auto pattern : patternLookup) {
-                if (dist < pattern.first) {
-                    *ptrData = pattern.second;
-                    break;
-                }
-            }
-            ptrData++;
-        }
-    }
+    //uint8_t* ptrData = shadingRatePatternData;
+    //for (uint32_t y = 0; y < imageExtent.height; y++) {
+    //    for (uint32_t x = 0; x < imageExtent.width; x++) {
+    //        const float deltaX = (float)imageExtent.width / 2.0f - (float)x;
+    //        const float deltaY = ((float)imageExtent.height / 2.0f - (float)y) * ((float)width / (float)height);
+    //        const float dist = std::sqrt(deltaX * deltaX + deltaY * deltaY);
+    //        for (auto pattern : patternLookup) {
+    //            if (dist < pattern.first) {
+    //                *ptrData = pattern.second;
+    //                break;
+    //            }
+    //        }
+    //        ptrData++;
+    //    }
+    //}
 
     VkBuffer stagingBuffer;
     VkDeviceMemory stagingMemory;
@@ -326,13 +328,6 @@ void VulkanExample::prepareShadingRateImage()
     VK_CHECK_RESULT(vkCreateSampler(device, &sampler, nullptr, &vrsShadingRateImage.descriptor.sampler));
     vrsShadingRateImage.descriptor.imageView = vrsShadingRateImage.view;
     vrsShadingRateImage.descriptor.imageLayout = VK_IMAGE_LAYOUT_SHADING_RATE_OPTIMAL_NV;
-    //VkCommandBuffer layoutCmd = vulkanDevice->createCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, true);
-    //vks::tools::setImageLayout(
-    //    layoutCmd,
-    //    shadingRateImage.image,
-    //    VK_IMAGE_ASPECT_COLOR_BIT,
-    //    VK_IMAGE_LAYOUT_UNDEFINED,
-    //    shadingRateImage.descriptor.imageLayout);
 }
 
 void VulkanExample::prepareColorAttachmentImage()
@@ -417,19 +412,17 @@ void VulkanExample::copyColorAttachment(VkCommandBuffer& commandBuffer, VkImage&
 {
     VkImageSubresourceRange subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
 
-    // Prepare current swap chain image as transfer destination
     vks::tools::setImageLayout(
         commandBuffer,
         vrsColorAttachment.image,
-        VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_IMAGE_LAYOUT_GENERAL,
         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         subresourceRange);
 
-    // Prepare ray tracing output image as transfer source
     vks::tools::setImageLayout(
         commandBuffer,
         colorAttachment,
-        VK_IMAGE_LAYOUT_GENERAL,
+        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
         VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
         subresourceRange);
 
@@ -441,36 +434,19 @@ void VulkanExample::copyColorAttachment(VkCommandBuffer& commandBuffer, VkImage&
     copyRegion.extent = { width, height, 1 };
     vkCmdCopyImage(commandBuffer, colorAttachment, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, vrsColorAttachment.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
 
-    // Transition swap chain image back for presentation
-    vks::tools::setImageLayout(
-        commandBuffer,
-        colorAttachment,
-        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-        subresourceRange);
-
-    // Transition ray tracing output image back to general layout
     vks::tools::setImageLayout(
         commandBuffer,
         vrsColorAttachment.image,
-        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         VK_IMAGE_LAYOUT_GENERAL,
         subresourceRange);
 
-    //VkImageCopy copyRegion{};
-    //copyRegion.srcSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
-    //copyRegion.srcOffset = { 0, 0, 0 };
-    //copyRegion.dstSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
-    //copyRegion.dstOffset = { 0, 0, 0 };
-    //copyRegion.extent = { width, height, 1 };
-    //vkCmdCopyImage(
-    //    commandBuffer,
-    //    colorAttachment,
-    //    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-    //    vrsColorAttachment.image,
-    //    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-    //    1,
-    //    &copyRegion);
+    vks::tools::setImageLayout(
+        commandBuffer,
+        colorAttachment,
+        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        subresourceRange);
 }
 
 void VulkanExample::buildComputeCommandBuffer()
@@ -582,14 +558,19 @@ void VulkanExample::draw()
 {
     // Submit compute commands
     // Use a fence to ensure that compute command buffer has finished executing before using it again
-    vkWaitForFences(device, 1, &vrsCompute.fence, VK_TRUE, UINT64_MAX);
-    vkResetFences(device, 1, &vrsCompute.fence);
+    if (isFirstTime) {
+        isFirstTime = false;
+    }
+    else {
+        vkWaitForFences(device, 1, &vrsCompute.fence, VK_TRUE, UINT64_MAX);
+        vkResetFences(device, 1, &vrsCompute.fence);
 
-    VkSubmitInfo computeSubmitInfo = vks::initializers::submitInfo();
-    computeSubmitInfo.commandBufferCount = 1;
-    computeSubmitInfo.pCommandBuffers = &vrsCompute.commandBuffer;
+        VkSubmitInfo computeSubmitInfo = vks::initializers::submitInfo();
+        computeSubmitInfo.commandBufferCount = 1;
+        computeSubmitInfo.pCommandBuffers = &vrsCompute.commandBuffer;
 
-    VK_CHECK_RESULT(vkQueueSubmit(vrsCompute.queue, 1, &computeSubmitInfo, vrsCompute.fence));
+        VK_CHECK_RESULT(vkQueueSubmit(vrsCompute.queue, 1, &computeSubmitInfo, vrsCompute.fence));
+    }
 
     VulkanExampleBase::prepareFrame();
 
