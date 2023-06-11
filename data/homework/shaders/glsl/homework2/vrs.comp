@@ -3,6 +3,8 @@ int SHADING_RATE_MAP[3][3] = {{5,7,7},{6, 8, 10},{6,9,11}};
  
 layout (binding = 0, r8i) uniform iimage2D u_vrs; 
 layout (binding = 1, rgba16f) uniform image2D u_color; 
+layout (binding = 2, rgba16f) uniform image2D u_last_depth; 
+layout (binding = 3, rgba16f) uniform image2D u_depth; 
  
 layout (local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 
@@ -12,7 +14,7 @@ layout (local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 
 #define T 0.15
 #define L 0.05
-#define K 20
+#define K 10
 
 void main(void){
     ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
@@ -27,6 +29,9 @@ void main(void){
             luma[i][j] = luma_v3.x + luma_v3.y + luma_v3.z;
             imageStore(u_color, uv, vec4(color, luma[i][j]));
             luma_avg +=  luma[i][j];
+
+            imageLoad(u_last_depth, uv).r;
+            imageLoad(u_depth, uv).r;
         }
     }
     luma_avg /= TILE_SIZE * TILE_SIZE;

@@ -36,6 +36,21 @@ public:
         VkMemoryBarrier copyColorAttachmentMemoryBarrier;
     } vrsCompute;
 
+    struct PreZ {
+        VkQueue queue;
+        VkCommandPool commandPool;
+        VkCommandBuffer commandBuffer;
+        VkFence fence;
+        VkDescriptorSetLayout descriptorSetLayout;
+        VkDescriptorSet descriptorSet;
+        VkPipelineLayout pipelineLayout;
+        VkPipeline pipeline;
+        VkMemoryBarrier copyColorAttachmentMemoryBarrier;
+
+        std::vector<vks::Texture> depth_textures;
+
+    } preZ;
+
     bool isFirstTime = true;
 
     vkglTF::Model scene;
@@ -74,21 +89,37 @@ public:
     VulkanExample();
     ~VulkanExample();
     virtual void getEnabledFeatures();
+    void prepareTextureTarget(vks::Texture* tex, uint32_t width, uint32_t height, VkFormat format);
     void handleResize();
     void buildCommandBuffers();
     void loadglTFFile(std::string filename);
     void loadAssets();
     void prepareShadingRateImage();
-    void prepareColorAttachmentImage();
     void copyColorAttachment(VkCommandBuffer& commandBuffer, VkImage& colorAttachment);
     void buildComputeCommandBuffer();
     void prepareCompute();
+    void preparePreZPass();
+    virtual void setupRenderPass() override;
     void draw();
     void setupDescriptors();
+    VkRenderPass preZRenderPass;
+    Pipelines preZPipelines;
+    std::vector<VkCommandBuffer> preZCmdBuffers;
+    void buildPreZCommandBuffer();
+    void setupPreZRenderPass();
+    void preparePipelines(std::string vert, std::string frag, VkRenderPass renderPass, Pipelines* basePipelines, Pipelines* shadingratePipelines = nullptr);
     void preparePipelines();
     void prepareUniformBuffers();
     void updateUniformBuffers();
     void prepare();
     virtual void render();
     virtual void OnUpdateUIOverlay(vks::UIOverlay* overlay);
+    struct DepthStencil {
+        VkImage image;
+        VkDeviceMemory mem;
+        VkImageView view;
+    };
+    std::vector<DepthStencil> depthTextures;
+    virtual void setupDepthStencil() override;
+    virtual void setupFrameBuffer() override;
 };
