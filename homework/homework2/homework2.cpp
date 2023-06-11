@@ -134,10 +134,10 @@ void VulkanExample::setupDescriptors()
     // Pool
     const std::vector<VkDescriptorPoolSize> poolSizes = {
         vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1),
-        vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 2),
+        vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 4),
     };
     VkDescriptorPoolCreateInfo descriptorPoolInfo =
-        vks::initializers::descriptorPoolCreateInfo(poolSizes, 2);
+        vks::initializers::descriptorPoolCreateInfo(poolSizes, 4);
     VK_CHECK_RESULT(vkCreateDescriptorPool(device, &descriptorPoolInfo, nullptr, &descriptorPool));
 
     // Descriptor set layout
@@ -660,24 +660,28 @@ void VulkanExample::copyColorAttachment(VkCommandBuffer& commandBuffer, VkImage&
 
 void VulkanExample::buildComputeCommandBuffer()
 {
-    VkCommandBufferAllocateInfo cmdBufAllocateInfo =
-        vks::initializers::commandBufferAllocateInfo(
-            vrsCompute.commandPool,
-            VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-            1);
+    vrsCompute.commandBuffers.resize(swapChain.imageCount);
 
-    VK_CHECK_RESULT(vkAllocateCommandBuffers(device, &cmdBufAllocateInfo, &vrsCompute.commandBuffer));
+    for (size_t i = 0; i < swapChain.imageCount; ++i) {
+        VkCommandBufferAllocateInfo cmdBufAllocateInfo =
+            vks::initializers::commandBufferAllocateInfo(
+                vrsCompute.commandPool,
+                VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+                1);
 
-    VkCommandBufferBeginInfo cmdBufInfo = vks::initializers::commandBufferBeginInfo();
+        VK_CHECK_RESULT(vkAllocateCommandBuffers(device, &cmdBufAllocateInfo, &vrsCompute.commandBuffers[i]));
 
-    VK_CHECK_RESULT(vkBeginCommandBuffer(vrsCompute.commandBuffer, &cmdBufInfo));
+        VkCommandBufferBeginInfo cmdBufInfo = vks::initializers::commandBufferBeginInfo();
 
-    vkCmdBindPipeline(vrsCompute.commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, vrsCompute.pipeline);
-    vkCmdBindDescriptorSets(vrsCompute.commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, vrsCompute.pipelineLayout, 0, 1, &vrsCompute.descriptorSet, 0, 0);
+        VK_CHECK_RESULT(vkBeginCommandBuffer(vrsCompute.commandBuffers[i], &cmdBufInfo));
 
-    vkCmdDispatch(vrsCompute.commandBuffer, vrsShadingRateImage.width, vrsShadingRateImage.height, 1);
+        vkCmdBindPipeline(vrsCompute.commandBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, vrsCompute.pipeline);
+        vkCmdBindDescriptorSets(vrsCompute.commandBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, vrsCompute.pipelineLayout, 0, 1, &vrsCompute.descriptorSets[i], 0, 0);
 
-    vkEndCommandBuffer(vrsCompute.commandBuffer);
+        vkCmdDispatch(vrsCompute.commandBuffers[i], vrsShadingRateImage.width, vrsShadingRateImage.height, 1);
+
+        vkEndCommandBuffer(vrsCompute.commandBuffers[i]);
+    }
 }
 
 void VulkanExample::prepareCompute()
@@ -699,7 +703,15 @@ void VulkanExample::prepareCompute()
         vks::initializers::descriptorSetLayoutBinding(
             VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
             VK_SHADER_STAGE_COMPUTE_BIT,
-            1)
+            1),
+        vks::initializers::descriptorSetLayoutBinding(
+            VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+            VK_SHADER_STAGE_COMPUTE_BIT,
+            2),
+        vks::initializers::descriptorSetLayoutBinding(
+            VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+            VK_SHADER_STAGE_COMPUTE_BIT,
+            3)
     };
 
     VkDescriptorSetLayoutCreateInfo descriptorLayout =
@@ -716,31 +728,60 @@ void VulkanExample::prepareCompute()
 
     VK_CHECK_RESULT(vkCreatePipelineLayout(device, &pPipelineLayoutCreateInfo, nullptr, &vrsCompute.pipelineLayout));
 
-    VkDescriptorSetAllocateInfo allocInfo =
-        vks::initializers::descriptorSetAllocateInfo(
-            descriptorPool,
-            &vrsCompute.descriptorSetLayout,
-            1);
+    vrsCompute.descriptorSets.resize(swapChain.imageCount);
 
-    VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, &vrsCompute.descriptorSet));
+    for (size_t i = 0; i < swapChain.imageCount; ++i) {
+        VkDescriptorSetAllocateInfo allocInfo =
+            vks::initializers::descriptorSetAllocateInfo(
+                descriptorPool,
+                &vrsCompute.descriptorSetLayout,
+                1);
 
-    std::vector<VkWriteDescriptorSet> computeWriteDescriptorSets =
-    {
-        // Binding 0: vrs image
-        vks::initializers::writeDescriptorSet(
-            vrsCompute.descriptorSet,
-            VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-            0,
-            &vrsShadingRateImage.descriptor),
-        // Binding 1: color image of last frame
-        vks::initializers::writeDescriptorSet(
-            vrsCompute.descriptorSet,
-            VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-            1,
-            &vrsColorAttachment.descriptor)
-    };
+        auto ret = vkAllocateDescriptorSets(device, &allocInfo, &vrsCompute.descriptorSets[i]);
+        //VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, &vrsCompute.descriptorSets[i]));
 
-    vkUpdateDescriptorSets(device, computeWriteDescriptorSets.size(), computeWriteDescriptorSets.data(), 0, NULL);
+        size_t i_1 = (i + swapChain.imageCount - 1) % swapChain.imageCount;
+
+        VkDescriptorImageInfo depth_desc{};
+        depth_desc.sampler = vrsShadingRateImage.descriptor.sampler;
+        depth_desc.imageView = depthTextures[i].view;
+        depth_desc.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+
+        VkDescriptorImageInfo last_depth_desc{};
+        last_depth_desc.sampler = vrsShadingRateImage.descriptor.sampler;
+        last_depth_desc.imageView = depthTextures[i_1].view;
+        last_depth_desc.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+
+        std::vector<VkWriteDescriptorSet> computeWriteDescriptorSets =
+        {
+            // Binding 0: vrs image
+            vks::initializers::writeDescriptorSet(
+                vrsCompute.descriptorSets[i],
+                VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                0,
+                &vrsShadingRateImage.descriptor),
+            // Binding 1: color image of last frame
+            vks::initializers::writeDescriptorSet(
+                vrsCompute.descriptorSets[i],
+                VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                1,
+                &vrsColorAttachment.descriptor),
+            vks::initializers::writeDescriptorSet(
+                vrsCompute.descriptorSets[i],
+                VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                2,
+                &last_depth_desc),
+            vks::initializers::writeDescriptorSet(
+                vrsCompute.descriptorSets[i],
+                VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                3,
+                &depth_desc)
+        };
+
+        vkUpdateDescriptorSets(device, computeWriteDescriptorSets.size(), computeWriteDescriptorSets.data(), 0, NULL);
+    }
+
+
 
     VkComputePipelineCreateInfo computePipelineCreateInfo =
         vks::initializers::computePipelineCreateInfo(vrsCompute.pipelineLayout, 0);
@@ -778,9 +819,9 @@ void VulkanExample::setupRenderPass()
     // Depth attachment @TODO : DON'T CLEAR DEPTH NOW
     attachments[1].format = depthFormat;
     attachments[1].samples = VK_SAMPLE_COUNT_1_BIT;
-    attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
     attachments[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     attachments[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
@@ -835,49 +876,10 @@ void VulkanExample::setupRenderPass()
     VK_CHECK_RESULT(vkCreateRenderPass(device, &renderPassInfo, nullptr, &renderPass));
 }
 
-void VulkanExample::preparePreZPass()
-{
-    int swapchain_size = swapChain.buffers.size();
-    preZ.depth_textures.resize(swapchain_size);
-    for (size_t i = 0; i < swapchain_size; ++i) {
-        prepareTextureTarget(&preZ.depth_textures[i], width, height, VK_FORMAT_R16_SFLOAT);
-    }
-
-    VkAttachmentDescription depthAttachment = {};
-    depthAttachment.format = VK_FORMAT_R16_SFLOAT;
-    depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-    depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-    VkAttachmentReference depthAttachmentRef = {};
-    depthAttachmentRef.attachment = 0;
-    depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-    VkSubpassDescription subpass = {};
-    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    subpass.colorAttachmentCount = 0;
-    subpass.pDepthStencilAttachment = &depthAttachmentRef;
-
-    VkRenderPassCreateInfo renderPassInfo = {};
-    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    renderPassInfo.attachmentCount = 1;
-    renderPassInfo.pAttachments = &depthAttachment;
-    renderPassInfo.subpassCount = 1;
-    renderPassInfo.pSubpasses = &subpass;
-
-    std::array<VkPipelineShaderStageCreateInfo, 2> shaderStages;
-
-    VkGraphicsPipelineCreateInfo pipelineCI = vks::initializers::pipelineCreateInfo(pipelineLayout, renderPass, 0);
-    shaderStages[0] = loadShader(getHomeworkShadersPath() + "homework2/motion_vector.vert.spv", VK_SHADER_STAGE_VERTEX_BIT);
-    shaderStages[1] = loadShader(getHomeworkShadersPath() + "homework2/motion_vector.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
-}
-
 void VulkanExample::draw()
 {
+    VulkanExampleBase::prepareFrame();
+
     // Submit compute commands
     // Use a fence to ensure that compute command buffer has finished executing before using it again
     submitInfo.commandBufferCount = 1;
@@ -893,13 +895,10 @@ void VulkanExample::draw()
 
         VkSubmitInfo computeSubmitInfo = vks::initializers::submitInfo();
         computeSubmitInfo.commandBufferCount = 1;
-        computeSubmitInfo.pCommandBuffers = &vrsCompute.commandBuffer;
+        computeSubmitInfo.pCommandBuffers = &vrsCompute.commandBuffers[currentBuffer];
 
         VK_CHECK_RESULT(vkQueueSubmit(vrsCompute.queue, 1, &computeSubmitInfo, vrsCompute.fence));
     }
-
-    VulkanExampleBase::prepareFrame();
-
     // Command buffer to be submitted to the queue
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &drawCmdBuffers[currentBuffer];

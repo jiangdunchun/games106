@@ -27,10 +27,10 @@ public:
     struct VRSCompute {
         VkQueue queue;
         VkCommandPool commandPool;
-        VkCommandBuffer commandBuffer;
+        std::vector<VkCommandBuffer> commandBuffers;
         VkFence fence;
         VkDescriptorSetLayout descriptorSetLayout;
-        VkDescriptorSet descriptorSet;
+        std::vector<VkDescriptorSet> descriptorSets;
         VkPipelineLayout pipelineLayout;
         VkPipeline pipeline;
         VkMemoryBarrier copyColorAttachmentMemoryBarrier;

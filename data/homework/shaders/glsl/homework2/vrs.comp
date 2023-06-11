@@ -27,11 +27,12 @@ void main(void){
             vec3 color = imageLoad(u_color, uv).rgb;
             vec3 luma_v3 = color * LUMA_WEIGHT;
             luma[i][j] = luma_v3.x + luma_v3.y + luma_v3.z;
-            imageStore(u_color, uv, vec4(color, luma[i][j]));
+            //imageStore(u_color, uv, vec4(color, luma[i][j]));
             luma_avg +=  luma[i][j];
 
-            imageLoad(u_last_depth, uv).r;
-            imageLoad(u_depth, uv).r;
+            vec4 last_depth = imageLoad(u_last_depth, uv);
+            float depth = imageLoad(u_depth, uv).r;
+            imageStore(u_color, uv, last_depth);
         }
     }
     luma_avg /= TILE_SIZE * TILE_SIZE;
