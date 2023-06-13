@@ -16,8 +16,18 @@ layout (set = 0, binding = 0) uniform UBOScene
 	int colorShadingRates;
 } uboScene;
 
+layout (location = 0) out vec3 outNormal;
+layout (location = 1) out vec3 outColor;
+layout (location = 2) out vec2 outUV;
+layout (location = 3) out vec3 outViewVec;
+layout (location = 4) out vec3 outLightVec;
+layout (location = 5) out vec4 outTangent;
+
 void main() 
 {
+	outColor = inColor;
+	outUV = inUV;
+
 	 vec4 frustum_pos = uboScene.projection * uboScene.view * uboScene.model * vec4(inPos.xyz, 1.0);
 	 gl_Position = frustum_pos * vec4(1,1,1.01,1);
 }

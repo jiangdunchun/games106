@@ -25,6 +25,13 @@ public:
     } vrsShadingRateImage;
     vks::Texture vrsColorAttachment;
     struct VRSCompute {
+        struct ShaderData {
+            vks::Buffer buffer;
+            struct Values {
+                glm::mat4 last;
+                glm::mat4 now;
+            } values;
+        } shaderData;
         VkQueue queue;
         VkCommandPool commandPool;
         std::vector<VkCommandBuffer> commandBuffers;
