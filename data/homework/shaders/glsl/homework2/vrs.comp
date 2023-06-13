@@ -13,7 +13,7 @@ layout (binding = 4) uniform ProjectionView
  
 layout (local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 
-#define RESOLUTION ivec2(1280, 720)
+#define RESOLUTION vec2(1280.0, 720.0)
 #define TILE_SIZE 16
 
 #define LUMA_WEIGHT vec3(0.299, 0.587, 0.114);
@@ -23,28 +23,90 @@ layout (local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 #define K 10
 
 void main(void){
-    ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 global_id = ivec2(gl_GlobalInvocationID.xy);
 
-    ivec2 motion_vector[TILE_SIZE][TILE_SIZE];
+    vec2 min_motion_vector = vec2(1.0, 1.0);
+    float luma[TILE_SIZE][TILE_SIZE];
     float luma_avg = 0;
     for (int i = 0; i < TILE_SIZE; ++i) {
         for (int j = 0; j < TILE_SIZE; ++j) {
-            ivec2 uv = pos * TILE_SIZE + ivec2(i, j);
+            ivec2 pixel_pos = global_id * TILE_SIZE + ivec2(i, j);
 
-            float depth = imageLoad(u_depth, uv).r / 1.01;
-            vec2 clip_coord = (2.0 * uv / RESOLUTION) - 1.0;
-            vec4 clip_pos = vec4(clip_coord, depth * 2.0 - 1.0, 1.0);
+            float depth = imageLoad(u_depth, pixel_pos).r / 1.01;
+            vec2 uv = pixel_pos / RESOLUTION;
+            vec2 clip_coord = 2.0 * uv - 1.0;
+            vec4 clip_pos = vec4(clip_coord, 2.0 * depth - 1.0, 1.0);
             vec4 world_pos = inverse(u_pv.now) * clip_pos;
+            world_pos /= world_pos.w;
 
             vec4 l_clip_pos = u_pv.last * world_pos;
-            l_clip_pos = l_clip_pos / l_clip_pos.w;
-            ivec2 l_uv = ivec2((l_clip_pos.xy + 1.0) / 2.0 * RESOLUTION);
+            l_clip_pos /= l_clip_pos.w;
+            vec2 l_uv = (l_clip_pos.xy + 1.0) / 2.0;
+            ivec2 l_pixel_pos = ivec2(l_uv * RESOLUTION);
             float l_depth = (l_clip_pos.z + 1.0) / 2.0;
 
-            float d_l_depth = imageLoad(u_last_depth, l_uv).r;
+            float d_l_depth = imageLoad(u_last_depth, l_pixel_pos).r;
 
-            motion_vector[i][j] = abs(d_l_depth - l_depth) > 0.01? RESOLUTION : l_uv - uv;
-            imageStore(u_color, uv, vec4(motion_vector[i][j].x / float(RESOLUTION.x), motion_vector[i][j].y / float(RESOLUTION.y), 0, 0));
+            if (abs(d_l_depth - l_depth) > 0.01) {
+                imageStore(u_vrs, global_id, ivec4(SHADING_RATE_MAP[0][0], 0, 0, 0));
+                return;
+            }
+
+            vec2 motion_vector = l_uv - uv;
+            min_motion_vector = vec2(min(min_motion_vector.x, abs(motion_vector.x)), min(min_motion_vector.y, abs(motion_vector.y)));
+
+            vec3 color = imageLoad(u_color, l_pixel_pos).rgb;
+            vec3 luma_v3 = color * LUMA_WEIGHT;
+            luma[i][j] = luma_v3.x + luma_v3.y + luma_v3.z;
+            luma_avg +=  luma[i][j];
         }
     }
+    luma_avg /= TILE_SIZE * TILE_SIZE;
+
+    float bh_v_v = pow(1.0 / (1.0 + pow(1.05 * min_motion_vector.y, 3.10)), 0.35);
+    float bh_v_h = pow(1.0 / (1.0 + pow(1.05 * min_motion_vector.x, 3.10)), 0.35);
+    float bq_v_v = 2.13 * pow(1.0 / (1.0 + pow(0.55 * min_motion_vector.y, 2.41)), 0.49);
+    float bq_v_h = 2.13 * pow(1.0 / (1.0 + pow(0.55 * min_motion_vector.x, 2.41)), 0.49);
+
+    float eksema_v[TILE_SIZE];
+    float eksema_h[TILE_SIZE];
+    for (int i = 0; i < TILE_SIZE; ++i) {
+        eksema_v[i] = 0;
+        eksema_h[i] = 0;
+        for (int j = 1; j < TILE_SIZE; ++j) {
+            eksema_v[i] += pow((luma[i][j] - luma[i][j - 1]) / 2,2);
+            eksema_h[i] += pow((luma[j][i] - luma[j - 1][i]) / 2,2);
+        }
+    }
+    for (int i = 0; i < TILE_SIZE; ++i) {
+        eksema_v[i] = sqrt(eksema_v[i] / (TILE_SIZE - 1));
+        eksema_h[i] = sqrt(eksema_h[i] / (TILE_SIZE - 1));
+    }
+
+    float tor = T * (luma_avg + L);
+
+    int shading_rate_v = 2;
+    int shading_rate_h = 2;
+    for (int i = 0; i < TILE_SIZE; ++i) {
+        if (bq_v_v * eksema_v[i] >= tor) {
+            if (bh_v_v * eksema_v[i] >= tor) {
+                shading_rate_v = min(shading_rate_v, 0);
+            }
+            else {
+                shading_rate_v = min(shading_rate_v, 1);
+            }
+        }
+
+        if (bq_v_h * eksema_h[i] >= tor) {
+            if (bh_v_h * eksema_h[i] >= tor) {
+                shading_rate_h = min(shading_rate_h, 0);
+            }
+            else {
+                shading_rate_h = min(shading_rate_h, 1);
+            }
+        }
+    }
+
+    int shading_rate = SHADING_RATE_MAP[shading_rate_v][shading_rate_h];
+    imageStore(u_vrs, global_id, ivec4(shading_rate, 0, 0, 0));
 }
