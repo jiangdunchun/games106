@@ -14,56 +14,21 @@
 class VulkanExample : public VulkanExampleBase
 {
 public:
-    struct ShadingRateImage {
-        VkImage image;
-        VkDeviceMemory memory;
-        VkImageView view;
-        VkImageLayout         imageLayout;
-        uint32_t              width, height;
-        VkDescriptorImageInfo descriptor;
-        VkSampler             sampler;
-    } vrsShadingRateImage;
-    vks::Texture vrsColorAttachment;
-    struct VRSCompute {
-        struct ShaderData {
-            vks::Buffer buffer;
-            struct Values {
-                glm::mat4 last;
-                glm::mat4 now;
-            } values;
-        } shaderData;
-        VkQueue queue;
-        VkCommandPool commandPool;
-        std::vector<VkCommandBuffer> commandBuffers;
-        VkFence fence;
-        VkDescriptorSetLayout descriptorSetLayout;
-        std::vector<VkDescriptorSet> descriptorSets;
-        VkPipelineLayout pipelineLayout;
-        VkPipeline pipeline;
-        VkMemoryBarrier copyColorAttachmentMemoryBarrier;
-    } vrsCompute;
-
-    struct PreZ {
-        VkQueue queue;
-        VkCommandPool commandPool;
-        VkCommandBuffer commandBuffer;
-        VkFence fence;
-        VkDescriptorSetLayout descriptorSetLayout;
-        VkDescriptorSet descriptorSet;
-        VkPipelineLayout pipelineLayout;
-        VkPipeline pipeline;
-        VkMemoryBarrier copyColorAttachmentMemoryBarrier;
-
-        std::vector<vks::Texture> depth_textures;
-
-    } preZ;
+    bool enableShadingRate = true;
+    bool colorShadingRate = false;
 
     bool isFirstTime = true;
 
     vkglTF::Model scene;
 
-    bool enableShadingRate = true;
-    bool colorShadingRate = false;
+    vks::Texture shadingRateImage;
+    std::vector<vks::Texture> depthAttachments;
+    vks::Texture colorAttachmentCopy;
+
+    struct Pipelines {
+        VkPipeline opaque;
+        VkPipeline masked;
+    };
 
     struct ShaderData {
         vks::Buffer buffer;
@@ -76,57 +41,74 @@ public:
             int32_t colorShadingRate;
         } values;
     } shaderData;
-
-    struct Pipelines {
-        VkPipeline opaque;
-        VkPipeline masked;
-    };
-
     Pipelines basePipelines;
     Pipelines shadingRatePipelines;
-
     VkPipelineLayout pipelineLayout;
     VkDescriptorSet descriptorSet;
     VkDescriptorSetLayout descriptorSetLayout;
-
     VkPhysicalDeviceShadingRateImagePropertiesNV physicalDeviceShadingRateImagePropertiesNV{};
     VkPhysicalDeviceShadingRateImageFeaturesNV enabledPhysicalDeviceShadingRateImageFeaturesNV{};
     PFN_vkCmdBindShadingRateImageNV vkCmdBindShadingRateImageNV;
 
+    
+
     VulkanExample();
     ~VulkanExample();
-    virtual void getEnabledFeatures();
-    void prepareTextureTarget(vks::Texture* tex, uint32_t width, uint32_t height, VkFormat format);
-    void handleResize();
-    void buildCommandBuffers();
-    void loadglTFFile(std::string filename);
+
     void loadAssets();
-    void prepareShadingRateImage();
-    void copyColorAttachment(VkCommandBuffer& commandBuffer, VkImage& colorAttachment);
-    void buildComputeCommandBuffer();
-    void prepareCompute();
-    void preparePreZPass();
-    virtual void setupRenderPass() override;
-    void draw();
-    void setupDescriptors();
-    VkRenderPass preZRenderPass;
-    Pipelines preZPipelines;
-    std::vector<VkCommandBuffer> preZCmdBuffers;
-    void buildPreZCommandBuffer();
-    void setupPreZRenderPass();
-    void preparePipelines(std::string vert, std::string frag, VkRenderPass renderPass, Pipelines* basePipelines, Pipelines* shadingratePipelines = nullptr);
-    void preparePipelines();
-    void prepareUniformBuffers();
-    void updateUniformBuffers();
-    void prepare();
-    virtual void render();
-    virtual void OnUpdateUIOverlay(vks::UIOverlay* overlay);
-    struct DepthStencil {
-        VkImage image;
-        VkDeviceMemory mem;
-        VkImageView view;
-    };
-    std::vector<DepthStencil> depthTextures;
+
+    virtual void getEnabledFeatures() override;
     virtual void setupDepthStencil() override;
+    virtual void setupRenderPass() override;
     virtual void setupFrameBuffer() override;
+
+    void prepareShadingRateImage();
+    void prepareColorAttachmentCopy();
+    void prepareUniformBuffers();
+
+    void setupDescriptors();
+    void preparePipelines(
+        std::string vert_path, std::string frag_path,
+        VkRenderPass renderPass,
+        Pipelines* basePipelines, Pipelines* shadingratePipelines = nullptr);
+
+    void copyColorAttachment(VkCommandBuffer& commandBuffer, VkImage& colorAttachment);
+    void buildCommandBuffers();
+
+    struct PreZ {
+        VkRenderPass renderPass;
+        Pipelines pipelines;
+        std::vector<VkCommandBuffer> commandBuffers;
+    } preZ;
+
+    void setupPreZRenderPass();
+    void buildPreZCommandBuffer();
+
+    struct ShadingRateCompute {
+        struct ShaderData {
+            vks::Buffer buffer;
+            struct Values {
+                glm::mat4 previousPV;
+                glm::mat4 currentPV;
+            } values;
+        } shaderData;
+        VkQueue queue;
+        VkCommandPool commandPool;
+        std::vector<VkCommandBuffer> commandBuffers;
+        VkFence fence;
+        VkDescriptorSetLayout descriptorSetLayout;
+        std::vector<VkDescriptorSet> descriptorSets;
+        VkPipelineLayout pipelineLayout;
+        VkPipeline pipeline;
+    } shadingRateCompute;
+
+    void prepareCompute();
+    void buildComputeCommandBuffer();
+    
+    virtual void prepare() override;
+
+    void updateUniformBuffers();
+
+    void handleResize();
+    virtual void render() override;
 };
