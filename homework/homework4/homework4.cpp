@@ -127,6 +127,57 @@ public:
 		ktx_uint8_t *ktxTextureData = ktxTexture_GetData(ktxTexture);
 		ktx_size_t ktxTextureSize = ktxTexture_GetSize(ktxTexture);
 
+
+
+		format = VK_FORMAT_BC1_RGB_UNORM_BLOCK; 
+		cubeMap.mipLevels = 1;
+
+		int compress_rate = 8;
+
+		int block_h_num = ktxTexture->baseWidth / 4;
+		int block_v_num = ktxTexture->baseHeight / 4;
+		int block_data_size = 64 / compress_rate;
+		int image_data_size = block_h_num * block_v_num * block_data_size;
+		int data_size = 6 * image_data_size;
+
+		uint8_t* bc_data = new uint8_t[data_size];
+
+		for (int face = 0; face < 6; ++face) {
+			ktx_size_t offset; 
+			ktxTexture_GetImageOffset(ktxTexture, 0, 0, face, &offset);
+			for (int x = 0; x < block_h_num; x++) {
+				for (int y = 0; y < block_v_num; y++) {
+					int pixel_x = x * 4;
+					int pixel_y = y * 4;
+					ktx_uint8_t* data_b = ktxTextureData + offset + (pixel_y * ktxTexture->baseWidth + pixel_x) * 4;
+					uint8_t r_b = *data_b;
+					uint8_t g_b = *(data_b + 1);
+					uint8_t b_b = *(data_b + 2);
+
+					uint8_t r_a = r_b >> 3;
+					uint8_t g_a = g_b >> 2;
+					uint8_t b_a = b_b >> 3;
+
+					uint16_t color = 0;
+					color |= uint16_t(b_a) << 0;
+					color |= uint16_t(g_a) << 5;
+					color |= uint16_t(r_a) << 11;
+
+					uint8_t* data_a = bc_data + image_data_size * face + (x + y * block_h_num) * block_data_size;
+					*(data_a) = color;
+					*(data_a + 1) = color >> 8;
+					*(data_a + 2) = color;
+					*(data_a + 3) = color >> 8;
+					*(data_a + 4) = 0;
+					*(data_a + 5) = 0;
+					*(data_a + 6) = 0;
+					*(data_a + 7) = 0;
+				} 
+			} 
+		}
+
+
+
 		VkMemoryAllocateInfo memAllocInfo = vks::initializers::memoryAllocateInfo();
 		VkMemoryRequirements memReqs;
 
@@ -153,7 +204,8 @@ public:
 		// Copy texture data into staging buffer
 		uint8_t *data;
 		VK_CHECK_RESULT(vkMapMemory(device, stagingMemory, 0, memReqs.size, 0, (void **)&data));
-		memcpy(data, ktxTextureData, ktxTextureSize);
+		//memcpy(data, ktxTextureData, ktxTextureSize);
+		memcpy(data, bc_data, data_size);
 		vkUnmapMemory(device, stagingMemory);
 
 		// Create optimal tiled target image
@@ -204,7 +256,8 @@ public:
 				bufferCopyRegion.imageExtent.width = ktxTexture->baseWidth >> level;
 				bufferCopyRegion.imageExtent.height = ktxTexture->baseHeight >> level;
 				bufferCopyRegion.imageExtent.depth = 1;
-				bufferCopyRegion.bufferOffset = offset;
+				//bufferCopyRegion.bufferOffset = offset;
+				bufferCopyRegion.bufferOffset = image_data_size * face;
 				bufferCopyRegions.push_back(bufferCopyRegion);
 			}
 		}
