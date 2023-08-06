@@ -131,10 +131,9 @@ public:
 
 		format = VK_FORMAT_BC1_RGB_UNORM_BLOCK; 
 		int compress_rate = 8;
+		int block_data_size = 64 / compress_rate;
 		auto get_offset = [&](int level, int face, int x, int y)->int {
 			int ret = 0;
-
-			int block_data_size = 64 / compress_rate;
 			for (int i = 0; i < level; i++) {
 				int width = ktxTexture->baseWidth >> i;
 				int height = ktxTexture->baseHeight >> i;
@@ -190,8 +189,8 @@ public:
 
 								block_buffer[i][j] = { 0, 0, 0 };
 								if (p_x < ktxTexture->baseWidth >> level && p_y < ktxTexture->baseHeight >> level) {
-									ktx_uint8_t* ptr = ktxTextureData + offset + (p_y * width + p_x) * 4;
-									block_buffer[i][j] = { *ptr, *(ptr + 1), *(ptr + 2) };
+									ktx_uint8_t* ptr_s = ktxTextureData + offset + (p_y * width + p_x) * 4;
+									block_buffer[i][j] = { *ptr_s, *(ptr_s + 1), *(ptr_s + 2) };
 								}
 							}
 						}
@@ -205,15 +204,15 @@ public:
 						color |= uint16_t(g_a) << 5;
 						color |= uint16_t(r_a) << 11;
 
-						uint8_t* data_a = bc_data + get_offset(level, face, x, y);
-						*(data_a) = color;
-						*(data_a + 1) = color >> 8;
-						*(data_a + 2) = color;
-						*(data_a + 3) = color >> 8;
-						*(data_a + 4) = 0;
-						*(data_a + 5) = 0;
-						*(data_a + 6) = 0;
-						*(data_a + 7) = 0;
+						uint8_t* ptr_d = bc_data + get_offset(level, face, x, y);
+						*(ptr_d) = color;
+						*(ptr_d + 1) = color >> 8;
+						*(ptr_d + 2) = color;
+						*(ptr_d + 3) = color >> 8;
+						*(ptr_d + 4) = 0;
+						*(ptr_d + 5) = 0;
+						*(ptr_d + 6) = 0;
+						*(ptr_d + 7) = 0;
 					}
 				}
 			}
