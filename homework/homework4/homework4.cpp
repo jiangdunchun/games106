@@ -159,6 +159,12 @@ public:
 
 		int bc_data_size = get_offset(cubeMap.mipLevels + 1, 0, 0, 0);
 		uint8_t* bc_data = new uint8_t[bc_data_size];
+
+		struct {
+			uint8_t r;
+			uint8_t g;
+			uint8_t b;
+		} block_buffer[4][4];
 		for (uint32_t level = 0; level < cubeMap.mipLevels; level++)
 		{
 			int width = ktxTexture->baseWidth >> level;
@@ -174,17 +180,31 @@ public:
 				for (int x = 0; x < block_h_num; x++) {
 					for (int y = 0; y < block_v_num; y++) {
 
-						int pixel_x = x * 4;
-						int pixel_y = y * 4;
+						int lt_x = x * 4;
+						int lt_y = y * 4;
 
-						ktx_uint8_t* data_b = ktxTextureData + offset + (pixel_y * width + pixel_x) * 4;
-						uint8_t r_b = *data_b;
-						uint8_t g_b = *(data_b + 1);
-						uint8_t b_b = *(data_b + 2);
+						for (int i = 0; i < 4; ++i) {
+							for (int j = 0; j < 4; ++j) {
+								int p_x = lt_x + i;
+								int p_y = lt_y + j;
 
-						uint8_t r_a = r_b >> 3;
-						uint8_t g_a = g_b >> 2;
-						uint8_t b_a = b_b >> 3;
+								if (p_x < ktxTexture->baseWidth >> level && p_y < ktxTexture->baseHeight >> level) {
+									ktx_uint8_t* ptr = ktxTextureData + offset + (p_y * width + p_x) * 4;
+									block_buffer[i][j].r = *ptr;
+									block_buffer[i][j].g = *(ptr + 1);
+									block_buffer[i][j].b = *(ptr + 2);
+								}
+								else {
+									block_buffer[i][j].r = 0;
+									block_buffer[i][j].g = 0;
+									block_buffer[i][j].b = 0;
+								}
+							}
+						}
+
+						uint8_t r_a = block_buffer[0][0].r >> 3;
+						uint8_t g_a = block_buffer[0][0].g >> 2;
+						uint8_t b_a = block_buffer[0][0].b >> 3;
 
 						uint16_t color = 0;
 						color |= uint16_t(b_a) << 0;
