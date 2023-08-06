@@ -188,16 +188,10 @@ public:
 								int p_x = lt_x + i;
 								int p_y = lt_y + j;
 
+								block_buffer[i][j] = { 0, 0, 0 };
 								if (p_x < ktxTexture->baseWidth >> level && p_y < ktxTexture->baseHeight >> level) {
 									ktx_uint8_t* ptr = ktxTextureData + offset + (p_y * width + p_x) * 4;
-									block_buffer[i][j].r = *ptr;
-									block_buffer[i][j].g = *(ptr + 1);
-									block_buffer[i][j].b = *(ptr + 2);
-								}
-								else {
-									block_buffer[i][j].r = 0;
-									block_buffer[i][j].g = 0;
-									block_buffer[i][j].b = 0;
+									block_buffer[i][j] = { *ptr, *(ptr + 1), *(ptr + 2) };
 								}
 							}
 						}
