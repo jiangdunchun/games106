@@ -128,9 +128,10 @@ public:
 		ktx_size_t ktxTextureSize = ktxTexture_GetSize(ktxTexture);
 
 
-
-		format = VK_FORMAT_BC1_RGB_UNORM_BLOCK; 
-		int compress_rate = 8;
+		format = VK_FORMAT_BC7_UNORM_BLOCK;
+		int compress_rate = 4;
+		//format = VK_FORMAT_BC1_RGB_UNORM_BLOCK; 
+		//int compress_rate = 8;
 		int block_data_size = 64 / compress_rate;
 		auto get_offset = [&](int level, int face, int x, int y)->int {
 			int ret = 0;
@@ -195,24 +196,33 @@ public:
 							}
 						}
 
-						uint8_t r_a = block_buffer[0][0].r >> 3;
-						uint8_t g_a = block_buffer[0][0].g >> 2;
-						uint8_t b_a = block_buffer[0][0].b >> 3;
-
-						uint16_t color = 0;
-						color |= uint16_t(b_a) << 0;
-						color |= uint16_t(g_a) << 5;
-						color |= uint16_t(r_a) << 11;
+						uint32_t color_r = 0;
+						color_r |= uint32_t(block_buffer[0][0].r >> 2) << 8;
+						color_r |= uint32_t(block_buffer[3][1].r >> 2) << 14;
+						color_r |= uint32_t(block_buffer[0][2].r >> 2) << 20;
+						color_r |= uint32_t(block_buffer[3][3].r >> 2) << 26;
+						uint32_t color_g = 0;
+						color_g |= uint32_t(block_buffer[0][0].g >> 2) << 8;
+						color_g |= uint32_t(block_buffer[3][1].g >> 2) << 14;
+						color_g |= uint32_t(block_buffer[0][2].g >> 2) << 20;
+						color_g |= uint32_t(block_buffer[3][3].g >> 2) << 26;
+						uint32_t color_b = 0;
+						color_b |= uint32_t(block_buffer[0][0].b >> 2) << 8;
+						color_b |= uint32_t(block_buffer[3][1].b >> 2) << 14;
+						color_b |= uint32_t(block_buffer[0][2].b >> 2) << 20;
+						color_b |= uint32_t(block_buffer[3][3].b >> 2) << 26;
 
 						uint8_t* ptr_d = bc_data + get_offset(level, face, x, y);
-						*(ptr_d) = color;
-						*(ptr_d + 1) = color >> 8;
-						*(ptr_d + 2) = color;
-						*(ptr_d + 3) = color >> 8;
-						*(ptr_d + 4) = 0;
-						*(ptr_d + 5) = 0;
-						*(ptr_d + 6) = 0;
-						*(ptr_d + 7) = 0;
+						*(ptr_d) = (1 << 1);
+						*(ptr_d + 1) = color_r >> 8;
+						*(ptr_d + 2) = color_r >> 16;
+						*(ptr_d + 3) = color_r >> 24;
+						*(ptr_d + 4) = color_g >> 8; 
+						*(ptr_d + 5) = color_g >> 16;
+						*(ptr_d + 6) = color_g >> 24;
+						*(ptr_d + 7) = color_b >> 8; 
+						*(ptr_d + 8) = color_b >> 16; 
+						*(ptr_d + 9) = color_b >> 24;
 					}
 				}
 			}
