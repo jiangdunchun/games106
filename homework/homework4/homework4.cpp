@@ -198,18 +198,18 @@ public:
 
 						uint32_t color_r = 0;
 						color_r |= uint32_t(block_buffer[0][0].r >> 2) << 8;
-						color_r |= uint32_t(block_buffer[3][1].r >> 2) << 14;
-						color_r |= uint32_t(block_buffer[0][2].r >> 2) << 20;
+						color_r |= uint32_t(block_buffer[0][0].r >> 2) << 14;
+						color_r |= uint32_t(block_buffer[3][3].r >> 2) << 20;
 						color_r |= uint32_t(block_buffer[3][3].r >> 2) << 26;
 						uint32_t color_g = 0;
 						color_g |= uint32_t(block_buffer[0][0].g >> 2) << 8;
-						color_g |= uint32_t(block_buffer[3][1].g >> 2) << 14;
-						color_g |= uint32_t(block_buffer[0][2].g >> 2) << 20;
+						color_g |= uint32_t(block_buffer[0][0].g >> 2) << 14;
+						color_g |= uint32_t(block_buffer[3][3].g >> 2) << 20;
 						color_g |= uint32_t(block_buffer[3][3].g >> 2) << 26;
 						uint32_t color_b = 0;
 						color_b |= uint32_t(block_buffer[0][0].b >> 2) << 8;
-						color_b |= uint32_t(block_buffer[3][1].b >> 2) << 14;
-						color_b |= uint32_t(block_buffer[0][2].b >> 2) << 20;
+						color_b |= uint32_t(block_buffer[0][0].b >> 2) << 14;
+						color_b |= uint32_t(block_buffer[3][3].b >> 2) << 20;
 						color_b |= uint32_t(block_buffer[3][3].b >> 2) << 26;
 
 						uint8_t* ptr_d = bc_data + get_offset(level, face, x, y);
