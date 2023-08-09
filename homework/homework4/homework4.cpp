@@ -10,6 +10,7 @@
 #include "VulkanglTFModel.h"
 #include <ktx.h>
 #include <ktxvulkan.h>
+#include "omp.h"
 
 #define ENABLE_VALIDATION false
 
@@ -84,6 +85,47 @@ public:
 		uniformBuffers.skybox.destroy();
 	}
 
+	void findRGBLine(uint8_t max_Index, std::vector<glm::uvec3>& block, glm::uvec3& E0, glm::uvec3& E1, std::vector<uint8_t>& Weights) {
+		float min_error = FLT_MAX;
+		for (int i = 0; i < block.size(); ++i) {
+			for (int j = i + 1; j < block.size(); ++j) {
+				glm::uvec3 e0 = block[i];
+				glm::uvec3 e1 = block[j];
+				if (e0 == e1) continue;
+
+				std::vector<uint8_t> ws;
+
+				glm::vec3 p0 = glm::vec3(e0);
+				glm::vec3 v01 = glm::vec3(e1) - p0;
+				float len = glm::length(v01) / max_Index;
+
+				float error = 0;
+				for (auto p : block) {
+					glm::vec3 v = glm::vec3(p) - p0;
+					float l = glm::dot(v, glm::normalize(v01)) / len;
+					l = glm::clamp(l, 0.0f, float(max_Index));
+					uint8_t w = l - uint8_t(l) < 0.5 ? uint8_t(l) : uint8_t(l) + 1;
+
+					ws.push_back(w);
+
+					error += glm::length(glm::vec3(p) - (p0 + w * len * glm::normalize(v01)));
+				}
+
+				if (error < min_error) {
+					min_error = error;
+					E0 = e0;
+					E1 = e1;
+					Weights = ws;
+				}
+			}
+		}
+		if (min_error == FLT_MAX) {
+			E0 = block[0];
+			E1 = block[0];
+			Weights = std::vector<uint8_t>(block.size(), 0);
+		}
+	}
+
 	// Enable physical device features required for this example
 	virtual void getEnabledFeatures()
 	{
@@ -128,10 +170,10 @@ public:
 		ktx_size_t ktxTextureSize = ktxTexture_GetSize(ktxTexture);
 
 
-		format = VK_FORMAT_BC7_UNORM_BLOCK;
-		int compress_rate = 4;
-		//format = VK_FORMAT_BC1_RGB_UNORM_BLOCK; 
-		//int compress_rate = 8;
+		//format = VK_FORMAT_BC7_UNORM_BLOCK;
+		//int compress_rate = 4;
+		format = VK_FORMAT_BC1_RGB_UNORM_BLOCK; 
+		int compress_rate = 8;
 		int block_data_size = 64 / compress_rate;
 		auto get_offset = [&](int level, int face, int x, int y)->int {
 			int ret = 0;
@@ -158,13 +200,9 @@ public:
 		};
 
 		int bc_data_size = get_offset(cubeMap.mipLevels + 1, 0, 0, 0);
-		uint8_t* bc_data = new uint8_t[bc_data_size];
+		uint8_t* bc_data = new uint8_t[bc_data_size]{};
 
-		struct {
-			uint8_t r;
-			uint8_t g;
-			uint8_t b;
-		} block_buffer[4][4];
+		glm::uvec3 block_buffer[4][4];
 		for (uint32_t level = 0; level < cubeMap.mipLevels; level++)
 		{
 			int width = ktxTexture->baseWidth >> level;
@@ -173,6 +211,7 @@ public:
 			int block_h_num = (width + 3) / 4;
 			int block_v_num = (height + 3) / 4;
 
+#pragma omp parallel for
 			for (int face = 0; face < 6; ++face) {
 				ktx_size_t offset;
 				ktxTexture_GetImageOffset(ktxTexture, level, 0, face, &offset);
@@ -196,33 +235,64 @@ public:
 							}
 						}
 
-						uint32_t color_r = 0;
-						color_r |= uint32_t(block_buffer[0][0].r >> 2) << 8;
-						color_r |= uint32_t(block_buffer[0][0].r >> 2) << 14;
-						color_r |= uint32_t(block_buffer[3][3].r >> 2) << 20;
-						color_r |= uint32_t(block_buffer[3][3].r >> 2) << 26;
-						uint32_t color_g = 0;
-						color_g |= uint32_t(block_buffer[0][0].g >> 2) << 8;
-						color_g |= uint32_t(block_buffer[0][0].g >> 2) << 14;
-						color_g |= uint32_t(block_buffer[3][3].g >> 2) << 20;
-						color_g |= uint32_t(block_buffer[3][3].g >> 2) << 26;
-						uint32_t color_b = 0;
-						color_b |= uint32_t(block_buffer[0][0].b >> 2) << 8;
-						color_b |= uint32_t(block_buffer[0][0].b >> 2) << 14;
-						color_b |= uint32_t(block_buffer[3][3].b >> 2) << 20;
-						color_b |= uint32_t(block_buffer[3][3].b >> 2) << 26;
+						std::vector<glm::uvec3> block;
+						for (int i = 0; i < 4; ++i) 
+							for (int j = 0; j < 4; ++j)
+								block.push_back(block_buffer[i][j]);
+
+						glm::uvec3 E0;
+						glm::uvec3 E1;
+						std::vector<uint8_t> Weights;
+						findRGBLine(3, block, E0, E1, Weights);
+
+						uint16_t color0 = 0;
+						color0 |= uint16_t(E0.b >> 3) << 0;
+						color0 |= uint16_t(E0.g >> 2) << 5;
+						color0 |= uint16_t(E0.r >> 3) << 11;
+
+						uint16_t color1 = 0;
+						color1 |= uint16_t(E1.b >> 3) << 0;
+						color1 |= uint16_t(E1.g >> 2) << 5;
+						color1 |= uint16_t(E1.r >> 3) << 11;
 
 						uint8_t* ptr_d = bc_data + get_offset(level, face, x, y);
-						*(ptr_d) = (1 << 1);
-						*(ptr_d + 1) = color_r >> 8;
-						*(ptr_d + 2) = color_r >> 16;
-						*(ptr_d + 3) = color_r >> 24;
-						*(ptr_d + 4) = color_g >> 8; 
-						*(ptr_d + 5) = color_g >> 16;
-						*(ptr_d + 6) = color_g >> 24;
-						*(ptr_d + 7) = color_b >> 8; 
-						*(ptr_d + 8) = color_b >> 16; 
-						*(ptr_d + 9) = color_b >> 24;
+						*(ptr_d) = color0;
+						*(ptr_d + 1) = color0 >> 8;
+						*(ptr_d + 2) = color1;
+						*(ptr_d + 3) = color1 >> 8;
+
+						for (int i = 0; i < Weights.size(); ++i) {
+							*(ptr_d + 4 + i / 4) |= Weights[i] << (6 - i % 4 * 2);
+						}
+
+						// // BC7
+						//uint32_t color_r = 0;
+						//color_r |= uint32_t(block_buffer[0][0].r >> 2) << 8;
+						//color_r |= uint32_t(block_buffer[0][0].r >> 2) << 14;
+						//color_r |= uint32_t(block_buffer[3][3].r >> 2) << 20;
+						//color_r |= uint32_t(block_buffer[3][3].r >> 2) << 26;
+						//uint32_t color_g = 0;
+						//color_g |= uint32_t(block_buffer[0][0].g >> 2) << 8;
+						//color_g |= uint32_t(block_buffer[0][0].g >> 2) << 14;
+						//color_g |= uint32_t(block_buffer[3][3].g >> 2) << 20;
+						//color_g |= uint32_t(block_buffer[3][3].g >> 2) << 26;
+						//uint32_t color_b = 0;
+						//color_b |= uint32_t(block_buffer[0][0].b >> 2) << 8;
+						//color_b |= uint32_t(block_buffer[0][0].b >> 2) << 14;
+						//color_b |= uint32_t(block_buffer[3][3].b >> 2) << 20;
+						//color_b |= uint32_t(block_buffer[3][3].b >> 2) << 26;
+
+						//uint8_t* ptr_d = bc_data + get_offset(level, face, x, y);
+						//*(ptr_d) = (1 << 1);
+						//*(ptr_d + 1) = color_r >> 8;
+						//*(ptr_d + 2) = color_r >> 16;
+						//*(ptr_d + 3) = color_r >> 24;
+						//*(ptr_d + 4) = color_g >> 8; 
+						//*(ptr_d + 5) = color_g >> 16;
+						//*(ptr_d + 6) = color_g >> 24;
+						//*(ptr_d + 7) = color_b >> 8; 
+						//*(ptr_d + 8) = color_b >> 16; 
+						//*(ptr_d + 9) = color_b >> 24;
 					}
 				}
 			}
