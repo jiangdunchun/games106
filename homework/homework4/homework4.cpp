@@ -211,7 +211,6 @@ public:
 			int block_h_num = (width + 3) / 4;
 			int block_v_num = (height + 3) / 4;
 
-#pragma omp parallel for
 			for (int face = 0; face < 6; ++face) {
 				ktx_size_t offset;
 				ktxTexture_GetImageOffset(ktxTexture, level, 0, face, &offset);
@@ -238,7 +237,7 @@ public:
 						std::vector<glm::uvec3> block;
 						for (int i = 0; i < 4; ++i) 
 							for (int j = 0; j < 4; ++j)
-								block.push_back(block_buffer[i][j]);
+								block.push_back(block_buffer[j][i]);
 
 						glm::uvec3 E0;
 						glm::uvec3 E1;
@@ -255,15 +254,45 @@ public:
 						color1 |= uint16_t(E1.g >> 2) << 5;
 						color1 |= uint16_t(E1.r >> 3) << 11;
 
-						uint8_t* ptr_d = bc_data + get_offset(level, face, x, y);
-						*(ptr_d) = color0;
-						*(ptr_d + 1) = color0 >> 8;
-						*(ptr_d + 2) = color1;
-						*(ptr_d + 3) = color1 >> 8;
+						bool is_same = color0 == color1;
+						bool is_reverse = color0 < color1;
 
-						for (int i = 0; i < Weights.size(); ++i) {
-							*(ptr_d + 4 + i / 4) |= Weights[i] << (6 - i % 4 * 2);
+						uint32_t index = 0;
+						if (!is_same) {
+							for (int i = 0; i < Weights.size(); ++i) {
+								uint8_t id = Weights[i];
+								if (!is_reverse) {
+									if (id == 3)
+										id = 1;
+									else if (id == 1)
+										id = 2;
+									else if (id == 2)
+										id = 3;
+								}
+								else {
+									if (id == 0)
+										id = 1;
+									else if (id == 3)
+										id = 0;
+									else if (id == 1)
+										id = 3;
+									else if (id == 2)
+										id = 2;
+								}
+								index |= uint32_t(id) << (2 * i);
+							}
 						}
+
+						uint8_t* ptr_d = bc_data + get_offset(level, face, x, y);
+						*(ptr_d) = is_reverse ? color1 : color0;
+						*(ptr_d + 1) = is_reverse ? color1 >> 8 : color0 >> 8;
+						*(ptr_d + 2) = is_reverse ? color0 : color1;
+						*(ptr_d + 3) = is_reverse ? color0 >> 8 : color1 >> 8;
+						*(ptr_d + 4) = index;
+						*(ptr_d + 5) = index >> 8;
+						*(ptr_d + 6) = index >> 16;
+						*(ptr_d + 7) = index >> 24;
+
 
 						// // BC7
 						//uint32_t color_r = 0;
